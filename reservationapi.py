@@ -18,7 +18,8 @@ import time
 from requests.exceptions import HTTPError
 from exceptions import (
     BadRequestError, InvalidTokenError, BadSlotError, NotProcessedError,
-    SlotUnavailableError,ReservationLimitError)
+    SlotUnavailableError, ReservationLimitError)
+
 
 class ReservationApi:
     def __init__(self, base_url: str, token: str, retries: int, delay: float):
@@ -34,22 +35,22 @@ class ReservationApi:
         self.base_url = base_url
         self.token    = token
         self.retries  = retries
-        self.delay    = delay
+
+        if delay < 1.0:
+            warnings.warn(
+                f"The configured delay ({delay}s) is below the server's 1-second "
+                "rate limit. Raising it to 1.0s to avoid penalisation."
+            )
+            self.delay = 1.0
+        else:
+            self.delay = delay
 
     def _reason(self, req: requests.Response) -> str:
         """Obtain the reason associated with a response"""
         reason = ''
-
-        # Try to get the JSON content, if possible, as that may contain a
-        # more useful message than the status line reason
         try:
             json = req.json()
             reason = json['message']
-
-        # A problem occurred while parsing the body - possibly no message
-        # in the body (which can happen if the API really does 500,
-        # rather than generating a "fake" 500), so fall back on the HTTP
-        # status line reason
         except simplejson.errors.JSONDecodeError:
             if isinstance(req.reason, bytes):
                 try:
@@ -58,52 +59,94 @@ class ReservationApi:
                     reason = req.reason.decode('iso-8859-1')
             else:
                 reason = req.reason
-
         return reason
 
-
     def _headers(self) -> dict:
-        """Create the authorization token header needed for API requests"""
-        # Your code goes here
-
+        """Return the Authorization header required by every API request."""
+        return {"Authorization": f"Bearer {self.token}"}
 
     def _send_request(self, method: str, endpoint: str) -> dict:
-        """Send a request to the reservation API and convert errors to
-           appropriate exceptions"""
-        # Your code goes here
+        """
+        Send an HTTP request to the API and return the parsed JSON body.
 
-        # Allow for multiple retries if needed
-            # Perform the request.
+        Retries up to self.retries times when the server returns a 5xx error,
+        waiting self.delay seconds between each attempt. Client-side errors
+        (4xx) are raised immediately without retrying, since retrying would
+        not change the outcome.
 
-            # Delay before processing the response to avoid swamping server.
+        Args:
+            method:   HTTP verb: 'GET', 'POST', or 'DELETE'.
+            endpoint: Path appended to base_url, e.g. '/reservation/available'.
 
-            # 200 response indicates all is well - send back the json data.
+        Returns:
+            Parsed JSON response as a Python dict or list.
 
-            # 5xx responses indicate a server-side error, show a warning
-            # (including the try number).
+        Raises:
+            BadRequestError:       400 — the request was malformed.
+            InvalidTokenError:     401 — API key is missing or incorrect.
+            BadSlotError:          403 — the requested slot does not exist.
+            NotProcessedError:     404 — the request has not been processed yet.
+            SlotUnavailableError:  409 — someone else already holds this slot.
+            ReservationLimitError: 451 — you already hold the maximum of 2 reservations.
+            HTTPError:             Any other unexpected status code.
+            ConnectionError:       All retry attempts exhausted on server errors.
+        """
+        url = f"{self.base_url}{endpoint}"
 
-            # 400 errors are client problems that are meaningful, so convert
-            # them to separate exceptions that can be caught and handled by
-            # the caller.
+        client_error_map = {
+            400: BadRequestError,
+            401: InvalidTokenError,
+            403: BadSlotError,
+            404: NotProcessedError,
+            409: SlotUnavailableError,
+            451: ReservationLimitError,
+        }
 
-            # Anything else is unexpected and may need to kill the client.
+        for attempt in range(1, self.retries + 1):
+            response = requests.request(method, url, headers=self._headers())
 
-        # Get here and retries have been exhausted, throw an appropriate
-        # exception.
+            # Pause before acting on the response to respect the rate limit.
+            # This also acts as the inter-retry delay.
+            time.sleep(self.delay)
 
+            if response.status_code == 200:
+                return response.json()
+
+            if response.status_code >= 500:
+                warnings.warn(
+                    f"Attempt {attempt}/{self.retries}: server returned "
+                    f"{response.status_code} ({self._reason(response)}). "
+                    "Will retry..."
+                )
+                continue
+
+            # 4xx means the client did something wrong — retrying won't help.
+            reason = self._reason(response)
+            exc_class = client_error_map.get(response.status_code, HTTPError)
+            raise exc_class(reason)
+
+        raise ConnectionError(
+            f"Request to {endpoint} failed after {self.retries} attempts. "
+            "The server may be temporarily unavailable."
+        )
 
     def get_slots_available(self):
-        """Obtain the list of slots currently available in the system"""
-        # Your code goes here
+        """Return all slots currently open for reservation on this service."""
+        return self._send_request("GET", "/reservation/available")
 
     def get_slots_held(self):
-        """Obtain the list of slots currently held by the client"""
-        # Your code goes here
+        """Return all slots you currently hold on this service."""
+        return self._send_request("GET", "/reservation")
 
     def release_slot(self, slot_id):
-        """Release a slot currently held by the client"""
-        # Your code goes here
+        """Cancel your existing reservation for the given slot."""
+        return self._send_request("DELETE", f"/reservation/{slot_id}")
 
     def reserve_slot(self, slot_id):
-        """Attempt to reserve a slot for the client"""
-        # Your code goes here
+        """
+        Attempt to reserve the given slot.
+
+        Raises SlotUnavailableError if another client has already taken it,
+        or ReservationLimitError if you already hold 2 reservations.
+        """
+        return self._send_request("POST", f"/reservation/{slot_id}")
