@@ -1,6 +1,7 @@
+#!/usr/bin/env python3
 """
 exceptions
-~~~~~~~~~~
+
 This module contains exceptions that are thrown by the ReservationApi
 when the API responds with a non-200 or 5xx error
 """

@@ -1,6 +1,7 @@
+#!/usr/bin/env python3
 """
 helpers
-~~~~~~~
+
 Small utility functions shared across the application.
 
 These deal with the mechanics of slot management (parsing API responses,

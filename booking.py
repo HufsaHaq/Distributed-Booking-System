@@ -1,7 +1,8 @@
+#!/usr/bin/env python3
 """
 booking
-~~~~~~~
-Wedding Planner — main entry point.
+
+Wedding Planner - main entry point.
 
 Runs the menu loop. All business logic lives in actions.py; all API
 setup lives in clients.py. This file just wires the menu together and
@@ -15,20 +16,29 @@ from booking_actions import book_specific_slot, reserve_earliest_match
 from cancel_actions  import cancel_booking, cancel_unneeded
 
 
+PINK   = "\033[95m"
+GREEN  = "\033[92m"
+WHITE  = "\033[97m"
+RESET  = "\033[0m"
+BOLD   = "\033[1m"
+
+
 def show_menu():
     print()
-    print("=" * 47)
-    print("       Wedding Planner — Booking Menu")
-    print("=" * 47)
-    print("  1.  View your current reservations")
-    print("  2.  View first 20 available slots")
-    print("  3.  Book a specific slot")
-    print("  4.  Cancel a reservation")
-    print("  5.  View first 5 slots free on both services")
-    print("  6.  Reserve the earliest matching slot")
-    print("  7.  Cancel all unnecessary reservations")
-    print("  8.  Exit")
-    print("=" * 47)
+    print(PINK + "=" * 47 + RESET)
+    print(BOLD + PINK + "       Wedding Planner - Booking Menu" + RESET)
+    print(PINK + "=" * 47 + RESET)
+
+    print(GREEN + "  1." + WHITE + " View your current reservations" + RESET)
+    print(GREEN + "  2." + WHITE + " View first 20 available slots" + RESET)
+    print(GREEN + "  3." + WHITE + " Book a specific slot" + RESET)
+    print(GREEN + "  4." + WHITE + " Cancel a reservation" + RESET)
+    print(GREEN + "  5." + WHITE + " View first 5 slots free on both services" + RESET)
+    print(GREEN + "  6." + WHITE + " Reserve the earliest matching slot" + RESET)
+    print(GREEN + "  7." + WHITE + " Cancel all unnecessary reservations" + RESET)
+    print(GREEN + "  8." + WHITE + " Exit" + RESET)
+
+    print(PINK + "=" * 47 + RESET)
 
 
 MENU_ACTIONS = {
@@ -43,7 +53,7 @@ MENU_ACTIONS = {
 
 
 def main():
-    print("\nWelcome to the Wedding Planner Booking System.")
+    print(PINK + BOLD + "\nWelcome to the Wedding Planner Booking System." + RESET)
     print("Checking your existing reservations on startup...")
     view_current_bookings()
 
@@ -51,13 +61,13 @@ def main():
         show_menu()
 
         try:
-            choice = input("Choose an option (1–8): ").strip()
+            choice = input(PINK + "Choose an option (1–8): " + RESET).strip()
         except (EOFError, KeyboardInterrupt):
             print("\nExiting.")
             sys.exit(0)
 
         if choice == "8":
-            print("\nGoodbye. Good luck with the wedding!")
+            print(PINK + "\nGoodbye. Good luck with the wedding!" + RESET)
             sys.exit(0)
 
         action = MENU_ACTIONS.get(choice)
@@ -68,7 +78,7 @@ def main():
                 print("\nAction interrupted. Returning to menu.")
             except Exception as e:
                 print(f"\nSomething went wrong: {e}")
-                print("Returning to the menu — no changes were made on the server.")
+                print("Returning to the menu - no changes were made on the server.")
         else:
             print("  Please enter a number between 1 and 8.")
 

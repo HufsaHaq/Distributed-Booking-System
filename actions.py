@@ -1,11 +1,12 @@
+#!/usr/bin/env python3
 """
 actions
-~~~~~~~
+
 Implements the seven user-facing actions in the Wedding Planner menu.
 
 Each function is self-contained: it fetches what it needs, does its work,
 prints clear output, and handles errors gracefully. None of them crash the
-program — failures are reported and control returns to the menu.
+program - failures are reported and control returns to the menu.
 """
 
 import time
@@ -59,7 +60,7 @@ def view_current_bookings():
     if matched:
         print(f"  Confirmed match (hotel + band): {fmt(matched)}")
     else:
-        print("  No confirmed match yet — you need the same slot on both services.")
+        print("  No confirmed match yet - you need the same slot on both services.")
 
     if only_hotel:
         print(f"  Hotel only (unmatched): {fmt(only_hotel)}")
@@ -155,7 +156,7 @@ def book_specific_slot():
         safe_release(hotel, "hotel", slot_id)
     except ReservationLimitError:
         print("  You already hold 2 band reservations. "
-              f"Hotel slot {slot_id} was reserved but band was not — "
+              f"Hotel slot {slot_id} was reserved but band was not - "
               "cancel a band reservation and try again.")
     except BadSlotError:
         print(f"  Slot {slot_id} does not exist on the band side.")
@@ -242,7 +243,7 @@ def view_matching_slots():
     """
     Show the 5 earliest slots currently free on both hotel and band.
 
-    Uses the cache where available to reduce API calls — run option 2 first
+    Uses the cache where available to reduce API calls - run option 2 first
     if you want to make sure the data is fully up to date.
     """
     print("\nLooking for slots free on both hotel and band...")
@@ -258,7 +259,7 @@ def view_matching_slots():
 
     if not matching:
         print("  No slots are currently free on both services at the same time.")
-        print("  Availability changes constantly — try again in a moment.")
+        print("  Availability changes constantly - try again in a moment.")
         return
 
     print(f"\n  First 5 slots free on both services:")
@@ -280,7 +281,7 @@ def reserve_earliest_match():
         that is your current best. We only book a new slot if we can
         improve on it (i.e. find a lower-numbered match).
       - Retry up to MAX_RETRIES times if no matching slots are available
-        right now — availability changes as other clients release slots.
+        right now - availability changes as other clients release slots.
       - Once a new pair is confirmed, release the old matched pair and
         any other stray reservations automatically.
       - You are never left without at least one booking: the old pair
@@ -301,7 +302,7 @@ def reserve_earliest_match():
     if current_best:
         print(f"  Your current best confirmed booking is slot {current_best}.")
 
-    # Retry loop — the spec requires we don't give up just because no matching
+    # Retry loop - the spec requires we don't give up just because no matching
     # slots are visible right now; availability shifts as other clients act.
     for attempt in range(1, MAX_RETRIES + 1):
 
@@ -339,7 +340,7 @@ def reserve_earliest_match():
 
         print(f"\n  Attempting to book slot {target}...")
 
-        # Re-read holdings before each booking attempt — they may have changed
+        # Re-read holdings before each booking attempt - they may have changed
         # if a previous loop iteration released something.
         try:
             hotel_held = slot_ids(hotel.get_slots_held())
@@ -407,7 +408,7 @@ def reserve_earliest_match():
             safe_release(hotel, "hotel", target)
             return
 
-        # Both sides confirmed — success
+        # Both sides confirmed - success
         print(f"\n  Slot {target} is now confirmed on both hotel and band.")
 
         # Release the old confirmed pair now that the new one is secured
@@ -458,13 +459,13 @@ def cancel_unneeded():
         print("  Use option 6 to find and book a matching slot before cleaning up.")
         return
 
-    print(f"  Keeping slot {best_match} — confirmed on both hotel and band.")
+    print(f"  Keeping slot {best_match} - confirmed on both hotel and band.")
 
     to_drop_hotel = [s for s in hotel_held if s != best_match]
     to_drop_band  = [s for s in band_held  if s != best_match]
 
     if not to_drop_hotel and not to_drop_band:
-        print("  Nothing to cancel — your reservations are already tidy.")
+        print("  Nothing to cancel - your reservations are already tidy.")
         return
 
     for slot in to_drop_hotel:
@@ -479,7 +480,7 @@ def cancel_unneeded():
 
 
 # ---------------------------------------------------------------------------
-# Internal helper — auto-cleanup after a successful reserve_earliest_match
+# Internal helper - auto-cleanup after a successful reserve_earliest_match
 # ---------------------------------------------------------------------------
 
 def _auto_cancel_unneeded(confirmed_slot: int):

@@ -1,6 +1,7 @@
+#!/usr/bin/env python3
 """
 cache
-~~~~~
+
 In-memory cache for available-slot lists.
 
 Available slot data changes constantly as other clients compete for bookings,
@@ -38,7 +39,7 @@ def get_available(api: reservationapi.ReservationApi,
         age = int(time.time() - cached["fetched_at"])
         if age < CACHE_MAX_AGE_SECONDS:
             print(f"  [{service.title()} slots: cached data, {age}s old "
-                  f"— choose 'View available slots' to refresh]")
+                  f"- choose 'View available slots' to refresh]")
             return cached["slots"]
 
     print(f"  Fetching current {service} availability from the server...")

@@ -1,6 +1,7 @@
+#!/usr/bin/env python3
 """
 clients
-~~~~~~~
+
 Loads api.ini and creates the two ReservationApi instances used across
 the application. Everything that needs `hotel` or `band` imports from here.
 """

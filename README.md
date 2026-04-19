@@ -1,4 +1,4 @@
-# Wedding Planner — Booking System
+# Wedding Planner - Booking System
 
 A command-line client for coordinating hotel and band reservations for a wedding.
 It talks to two separate REST APIs and makes sure both are booked on the same slot number.
@@ -9,6 +9,11 @@ It talks to two separate REST APIs and makes sure both are booked on the same sl
 
 ```bash
 python3 booking.py
+
+or
+
+chmod +x booking.py
+./booking.py
 ```
 
 
@@ -42,25 +47,25 @@ This file just wires the menu numbers to the functions in the action files.
 
 ### `view_actions.py`
 
-- **Option 1 — View current reservations:** Fetches what you currently hold
+- **Option 1 - View current reservations:** Fetches what you currently hold
   on both hotel and band, then sorts them into confirmed pairs (same slot on
   both) and unmatched ones (only on one service).
 
-- **Option 2 — View first 20 available slots:** Hits both APIs fresh and
+- **Option 2 - View first 20 available slots:** Hits both APIs fresh and
   shows the first 20 free slots on each. Updates the cache.
 
-- **Option 5 — View first 5 matching slots:** Finds slots that are free on
+- **Option 5 - View first 5 matching slots:** Finds slots that are free on
   both hotel *and* band simultaneously, and shows the earliest five. Uses the
   cache if the data is recent enough, to avoid unnecessary API calls.
 
 ### `booking_actions.py`
 Everything that creates a reservation.
 
-- **Option 3 — Book a specific slot:** Takes a slot number from the user and
+- **Option 3 - Book a specific slot:** Takes a slot number from the user and
   reserves it on both hotel and band. Books the hotel first; if the band then
   fails, it releases the hotel slot automatically so nothing is left dangling.
 
-- **Option 6 — Reserve the earliest matching slot:**  Finds the lowest slot number currently free on both services and
+- **Option 6 - Reserve the earliest matching slot:**  Finds the lowest slot number currently free on both services and
   books it. Key behaviours:
   - If you already have a confirmed pair, it only books a new one if it finds
     something earlier - otherwise it tells you your current booking is already
@@ -74,10 +79,10 @@ Everything that creates a reservation.
 ### `cancel_actions.py`
 Everything that removes a reservation.
 
-- **Option 4 — Cancel a specific reservation:** Shows what you currently hold,
+- **Option 4 - Cancel a specific reservation:** Shows what you currently hold,
   asks for a slot number, then lets you cancel it on the hotel, band, or both.
 
-- **Option 7 — Cancel all unnecessary reservations:** Keeps only the earliest
+- **Option 7 - Cancel all unnecessary reservations:** Keeps only the earliest
   confirmed pair (same slot on both services) and releases everything else.
   This is also run automatically after a successful Option 6.
 
@@ -95,9 +100,9 @@ data. Any operation that is about to make a booking always bypasses the cache
 
 ### `helpers.py`
 
-- `slot_ids()` — converts the raw API response format (`[{"id": "14"}, ...]`) into a plain sorted list of integers.
-- `safe_release()` — cancels a slot and prints a clear success or failure message, rather than letting exceptions go silently.
-- `free_up_slot()` — when you're at the 2-reservation limit and need to book something new, this drops the highest-numbered *unmatched* slot to make room. It refuses to drop a slot that's part of a confirmed pair. Lower slot numbers are earlier dates, which are more desirable.
+- `slot_ids()` - converts the raw API response format (`[{"id": "14"}, ...]`) into a plain sorted list of integers.
+- `safe_release()` - cancels a slot and prints a clear success or failure message, rather than letting exceptions go silently.
+- `free_up_slot()` - when you're at the 2-reservation limit and need to book something new, this drops the highest-numbered *unmatched* slot to make room. It refuses to drop a slot that's part of a confirmed pair. Lower slot numbers are earlier dates, which are more desirable.
 
 ### `reservationapi.py` 
 Handles adding the Authorization header to every

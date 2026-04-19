@@ -1,7 +1,8 @@
+#!/usr/bin/env python3
 """
 cancel_actions
-~~~~~~~~~~~~~~
-Reservation-cancelling menu actions — options 4 and 7.
+
+Reservation-cancelling menu actions - options 4 and 7.
 
 Option 4 lets the user manually pick a slot to cancel.
 Option 7 automatically drops everything except the best confirmed pair.
@@ -102,13 +103,13 @@ def cancel_unneeded():
         print("  Use option 6 to find and book a matching slot before cleaning up.")
         return
 
-    print(f"  Keeping slot {best_match} — confirmed on both hotel and band.")
+    print(f"  Keeping slot {best_match} - confirmed on both hotel and band.")
 
     to_drop_hotel = [s for s in hotel_held if s != best_match]
     to_drop_band  = [s for s in band_held  if s != best_match]
 
     if not to_drop_hotel and not to_drop_band:
-        print("  Nothing to cancel — your reservations are already tidy.")
+        print("  Nothing to cancel - your reservations are already tidy.")
         return
 
     for slot in to_drop_hotel:

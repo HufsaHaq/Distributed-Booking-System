@@ -1,7 +1,8 @@
+#!/usr/bin/env python3
 """
 view_actions
-~~~~~~~~~~~~
-Read-only menu actions — options 1, 2, and 5.
+
+Read-only menu actions - options 1, 2, and 5.
 
 Nothing in here modifies any reservation. These functions just fetch
 data and display it clearly. They're safe to run at any time.
@@ -46,7 +47,7 @@ def view_current_bookings():
     if matched:
         print(f"  Confirmed match (hotel + band): {fmt(matched)}")
     else:
-        print("  No confirmed match yet — you need the same slot on both services.")
+        print("  No confirmed match yet - you need the same slot on both services.")
 
     if only_hotel:
         print(f"  Hotel only (unmatched): {fmt(only_hotel)}")
@@ -82,7 +83,7 @@ def view_matching_slots():
     """
     Show the 5 earliest slots currently free on both hotel and band.
 
-    Uses the cache where available to reduce API calls — run option 2
+    Uses the cache where available to reduce API calls - run option 2
     first if you want fully up-to-date data.
     """
     print("\nLooking for slots free on both hotel and band...")
@@ -98,7 +99,7 @@ def view_matching_slots():
 
     if not matching:
         print("  No slots are currently free on both services at the same time.")
-        print("  Availability changes constantly — try again in a moment.")
+        print("  Availability changes constantly - try again in a moment.")
         return
 
     print(f"\n  First 5 slots free on both services:")

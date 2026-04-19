@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """ Reservation API wrapper
 
 This class implements a simple wrapper around the reservation API. It
@@ -82,12 +83,12 @@ class ReservationApi:
             Parsed JSON response as a Python dict or list.
 
         Raises:
-            BadRequestError:       400 — the request was malformed.
-            InvalidTokenError:     401 — API key is missing or incorrect.
-            BadSlotError:          403 — the requested slot does not exist.
-            NotProcessedError:     404 — the request has not been processed yet.
-            SlotUnavailableError:  409 — someone else already holds this slot.
-            ReservationLimitError: 451 — you already hold the maximum of 2 reservations.
+            BadRequestError:       400 - the request was malformed.
+            InvalidTokenError:     401 - API key is missing or incorrect.
+            BadSlotError:          403 - the requested slot does not exist.
+            NotProcessedError:     404 - the request has not been processed yet.
+            SlotUnavailableError:  409 - someone else already holds this slot.
+            ReservationLimitError: 451 - you already hold the maximum of 2 reservations.
             HTTPError:             Any other unexpected status code.
             ConnectionError:       All retry attempts exhausted on server errors.
         """
@@ -120,7 +121,7 @@ class ReservationApi:
                 )
                 continue
 
-            # 4xx means the client did something wrong — retrying won't help.
+            # 4xx means the client did something wrong - retrying won't help.
             reason = self._reason(response)
             exc_class = client_error_map.get(response.status_code, HTTPError)
             raise exc_class(reason)

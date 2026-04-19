@@ -1,7 +1,8 @@
+#!/usr/bin/env python3
 """
 booking_actions
-~~~~~~~~~~~~~~~
-Reservation-creating menu actions — options 3 and 6.
+
+Reservation-creating menu actions - options 3 and 6.
 
 Option 3 lets the user pick a specific slot.
 Option 6 finds and books the earliest slot free on both services,
@@ -75,7 +76,7 @@ def book_specific_slot():
         safe_release(hotel, "hotel", slot_id)
     except ReservationLimitError:
         print("  You already hold 2 band reservations. "
-              f"Hotel slot {slot_id} was reserved but band was not — "
+              f"Hotel slot {slot_id} was reserved but band was not - "
               "cancel a band reservation and try again.")
     except BadSlotError:
         print(f"  Slot {slot_id} does not exist on the band side.")
@@ -94,7 +95,7 @@ def reserve_earliest_match():
     Strategy:
       - Read current holdings to establish the current best confirmed pair.
       - Retry up to MAX_RETRIES times if no matching slots are visible right
-        now — availability shifts constantly as other clients act.
+        now - availability shifts constantly as other clients act.
       - Once a new pair is confirmed, release the old matched pair and any
         other stray reservations automatically.
       - The old pair is only released after the new one is secured, so you
@@ -115,7 +116,7 @@ def reserve_earliest_match():
     if current_best:
         print(f"  Your current best confirmed booking is slot {current_best}.")
 
-    # Retry loop — the spec requires we don't give up just because no matching
+    # Retry loop - the spec requires we don't give up just because no matching
     # slots are visible right now; availability shifts as other clients act.
     for attempt in range(1, MAX_RETRIES + 1):
 
@@ -156,7 +157,7 @@ def reserve_earliest_match():
 
         print(f"\n  Attempting to book slot {target}...")
 
-        # Re-read holdings before each booking attempt — they may have changed
+        # Re-read holdings before each booking attempt - they may have changed
         # if a previous loop iteration released something.
         try:
             hotel_held = slot_ids(hotel.get_slots_held())
@@ -224,7 +225,7 @@ def reserve_earliest_match():
             safe_release(hotel, "hotel", target)
             return
 
-        # Both sides confirmed — success
+        # Both sides confirmed - success
         print(f"\n  Slot {target} is now confirmed on both hotel and band.")
 
         # Release the old confirmed pair now that the new one is secured
