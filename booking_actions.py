@@ -62,6 +62,17 @@ def _prompt_slot_number():
 def _book_hotel_only():
     """Reserve a single slot on the hotel only."""
     print("\nBook hotel only")
+
+    try:
+        hotel_slots = get_available(hotel, "hotel", force_fresh=True)
+        if hotel_slots:
+            preview = ", ".join(str(s) for s in hotel_slots[:20])
+            print(f"\n  Available hotel slots (first 20): {preview}")
+        else:
+            print("\n  No hotel slots are currently available.")
+    except Exception as e:
+        print(f"\n  Could not fetch hotel availability: {e}")
+
     slot_id = _prompt_slot_number()
     if slot_id is None:
         return
@@ -86,6 +97,17 @@ def _book_hotel_only():
 def _book_band_only():
     """Reserve a single slot on the band only."""
     print("\nBook band only")
+
+    try:
+        band_slots = get_available(band, "band", force_fresh=True)
+        if band_slots:
+            preview = ", ".join(str(s) for s in band_slots[:20])
+            print(f"\n  Available band slots (first 20): {preview}")
+        else:
+            print("\n  No band slots are currently available.")
+    except Exception as e:
+        print(f"\n  Could not fetch band availability: {e}")
+
     slot_id = _prompt_slot_number()
     if slot_id is None:
         return
@@ -116,6 +138,19 @@ def _book_matching():
     left single.
     """
     print("\nBook matching slot (hotel + band)")
+
+    try:
+        hotel_slots = get_available(hotel, "hotel", force_fresh=True)
+        band_slots  = get_available(band,  "band",  force_fresh=True)
+        matching    = sorted(set(hotel_slots) & set(band_slots))
+        if matching:
+            preview = ", ".join(str(s) for s in matching[:20])
+            print(f"\n  Slots free on both hotel and band (first 20): {preview}")
+        else:
+            print("\n  No slots are currently free on both services simultaneously.")
+    except Exception as e:
+        print(f"\n  Could not fetch availability: {e}")
+
     slot_id = _prompt_slot_number()
     if slot_id is None:
         return
