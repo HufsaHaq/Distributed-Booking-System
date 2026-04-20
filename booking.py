@@ -16,9 +16,9 @@ from booking_actions import book_specific_slot, reserve_earliest_match
 from cancel_actions  import cancel_booking, cancel_unneeded
 
 
-PINK   = "\033[95m"
-GREEN  = "\033[92m"
-WHITE  = "\033[97m"
+PINK   = "\033[35m"
+GREEN  = "\033[32m"
+WHITE  = "\033[37m"
 RESET  = "\033[0m"
 BOLD   = "\033[1m"
 

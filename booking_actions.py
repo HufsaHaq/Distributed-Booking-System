@@ -63,7 +63,7 @@ def book_specific_slot():
     if not hotel_booked:
         return
 
-    # --- Band (only if hotel succeeded) ---
+    # Band (only if hotel succeeded) 
     print(f"  Reserving band slot {slot_id}...")
     try:
         band.reserve_slot(slot_id)
@@ -92,14 +92,10 @@ def reserve_earliest_match():
     """
     Find the earliest slot free on both services and book it.
 
-    Strategy:
-      - Read current holdings to establish the current best confirmed pair.
-      - Retry up to MAX_RETRIES times if no matching slots are visible right
-        now - availability shifts constantly as other clients act.
-      - Once a new pair is confirmed, release the old matched pair and any
-        other stray reservations automatically.
-      - The old pair is only released after the new one is secured, so you
-        are never left without at least one confirmed booking.
+      - Read current holdings to find the current best confirmed pair.
+      - Retry up to MAX_RETRIES times if no matching slots are visible right now 
+      - Once a new pair is confirmed, release the old matched pair and any other stray reservations automatically.
+      - The old pair is only released after the new one is secured, so you are never left without at least one confirmed booking.
     """
     print("\nSearching for the earliest slot free on both hotel and band...")
 
@@ -116,8 +112,7 @@ def reserve_earliest_match():
     if current_best:
         print(f"  Your current best confirmed booking is slot {current_best}.")
 
-    # Retry loop - the spec requires we don't give up just because no matching
-    # slots are visible right now; availability shifts as other clients act.
+    # Retry loop 
     for attempt in range(1, MAX_RETRIES + 1):
 
         try:
@@ -248,14 +243,14 @@ def _auto_cancel_unneeded(confirmed_slot: int):
     Drop any stray reservations after a successful booking.
 
     Called automatically by reserve_earliest_match once the new pair is
-    locked in. Option 7 (cancel_unneeded) exists so markers can also
+    locked in. Option 7 (cancel_unneeded) exists so can also
     trigger this step manually.
     """
     try:
         hotel_held = slot_ids(hotel.get_slots_held())
         band_held  = slot_ids(band.get_slots_held())
     except Exception:
-        return  # non-critical; the confirmed booking is already secured
+        return  # the confirmed booking is already secured
 
     extras_hotel = [s for s in hotel_held if s != confirmed_slot]
     extras_band  = [s for s in band_held  if s != confirmed_slot]
