@@ -22,23 +22,102 @@ from helpers import slot_ids, safe_release, free_up_slot
 
 def book_specific_slot():
     """
-    Reserve a slot number chosen by the user on both hotel and band.
-
-    Books the hotel first. If the hotel succeeds but the band then fails,
-    the hotel reservation is automatically released so nothing is left dangling.
+    Submenu for option 3 - lets the user choose whether to book the hotel
+    only, the band only, or both services for the same slot.
     """
     print("\nBook a specific slot")
-    print("The same slot number will be reserved on both hotel and band.")
+    print()
+    print("  1.  Book hotel only")
+    print("  2.  Book band only")
+    print("  3.  Book matching (hotel + band, same slot)")
+    print("  4.  Back")
 
-    raw = input("\nEnter the slot number to book (or press Enter to cancel): ").strip()
+    choice = input("\nChoose an option (1–4): ").strip()
+
+    if choice == "1":
+        _book_hotel_only()
+    elif choice == "2":
+        _book_band_only()
+    elif choice == "3":
+        _book_matching()
+    elif choice == "4":
+        return
+    else:
+        print("  Please enter a number between 1 and 4.")
+
+
+def _prompt_slot_number():
+    """Ask the user for a slot number. Returns the integer or None if cancelled."""
+    raw = input("Enter the slot number (or press Enter to cancel): ").strip()
     if not raw:
         print("  Cancelled.")
-        return
-
+        return None
     try:
-        slot_id = int(raw)
+        return int(raw)
     except ValueError:
         print(f"  '{raw}' is not a valid number. Please enter a whole number.")
+        return None
+
+
+def _book_hotel_only():
+    """Reserve a single slot on the hotel only."""
+    print("\nBook hotel only")
+    slot_id = _prompt_slot_number()
+    if slot_id is None:
+        return
+
+    print(f"\n  Reserving hotel slot {slot_id}...")
+    try:
+        hotel.reserve_slot(slot_id)
+        clear_cache()
+        print(f"  Hotel slot {slot_id} reserved.")
+        print("  Note: you still need a matching band slot to confirm the wedding.")
+    except SlotUnavailableError:
+        print(f"  Slot {slot_id} is already taken on the hotel.")
+    except ReservationLimitError:
+        print("  You already hold 2 hotel reservations. "
+              "Cancel one with option 4 before booking another.")
+    except BadSlotError:
+        print(f"  Slot {slot_id} does not exist (valid range: 1–550).")
+    except Exception as e:
+        print(f"  Hotel booking failed: {e}")
+
+
+def _book_band_only():
+    """Reserve a single slot on the band only."""
+    print("\nBook band only")
+    slot_id = _prompt_slot_number()
+    if slot_id is None:
+        return
+
+    print(f"\n  Reserving band slot {slot_id}...")
+    try:
+        band.reserve_slot(slot_id)
+        clear_cache()
+        print(f"  Band slot {slot_id} reserved.")
+        print("  Note: you still need a matching hotel slot to confirm the wedding.")
+    except SlotUnavailableError:
+        print(f"  Slot {slot_id} is already taken on the band.")
+    except ReservationLimitError:
+        print("  You already hold 2 band reservations. "
+              "Cancel one with option 4 before booking another.")
+    except BadSlotError:
+        print(f"  Slot {slot_id} does not exist (valid range: 1–550).")
+    except Exception as e:
+        print(f"  Band booking failed: {e}")
+
+
+def _book_matching():
+    """
+    Reserve the same slot on both hotel and band.
+
+    Books hotel first. If the hotel succeeds but the band then fails for any
+    reason, the hotel reservation is released automatically so nothing is
+    left single.
+    """
+    print("\nBook matching slot (hotel + band)")
+    slot_id = _prompt_slot_number()
+    if slot_id is None:
         return
 
     # --- Hotel ---
@@ -76,7 +155,7 @@ def book_specific_slot():
         safe_release(hotel, "hotel", slot_id)
     except ReservationLimitError:
         print("  You already hold 2 band reservations. "
-              f"Hotel slot {slot_id} was reserved but band was not - "
+              f"Hotel slot {slot_id} was reserved but the band was not - "
               "cancel a band reservation and try again.")
     except BadSlotError:
         print(f"  Slot {slot_id} does not exist on the band side.")
