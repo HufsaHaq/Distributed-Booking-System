@@ -55,7 +55,7 @@ def show_menu():
     print(GREEN + "  4." + WHITE + "  Cancel a reservation"                     + RESET)
     print(GREEN + "  5." + WHITE + "  View first 5 slots free on both services" + RESET)
     print(GREEN + "  6." + WHITE + "  Reserve the earliest matching slot"       + RESET)
-    print(GREEN + "  7." + WHITE + "  Cancel all unnecessary reservations"      + RESET)
+    print(GREEN + "  7." + WHITE + "  Cancel any unneeded reservations"      + RESET)
     print(PINK + "-" * 55 + RESET)
     print(GREEN + "  8." + WHITE + "  Clear screen"                             + RESET)
     print(GREEN + "  9." + WHITE + "  Exit"                                     + RESET)

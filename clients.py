@@ -7,7 +7,13 @@ the application. Everything that needs `hotel` or `band` imports from here.
 """
 
 import configparser
+import warnings
 import reservationapi
+
+# By default warnings.warn() prints the full file path and line number, which
+# looks  bad
+# This replaces that with a clean [WARNING] tag t
+warnings.formatwarning = lambda msg, *args, **kwargs: f"  [WARNING] {msg}\n"
 
 config = configparser.ConfigParser(inline_comment_prefixes=("##", "#"))
 config.read("api.ini")
