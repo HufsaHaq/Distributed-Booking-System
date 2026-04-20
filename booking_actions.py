@@ -15,9 +15,11 @@ from exceptions import (
     BadSlotError, SlotUnavailableError, ReservationLimitError,
 )
 
-from clients import hotel, band, MAX_RETRIES, DELAY
-from cache   import get_available, clear_cache
-from helpers import slot_ids, safe_release, free_up_slot
+from clients  import hotel, band, MAX_RETRIES, DELAY
+from cache    import get_available, clear_cache
+from helpers  import slot_ids, safe_release, free_up_slot
+from parallel import run_both
+import status
 
 
 def book_specific_slot():
@@ -214,8 +216,10 @@ def reserve_earliest_match():
     print("\nSearching for the earliest slot free on both hotel and band...")
 
     try:
-        hotel_held = slot_ids(hotel.get_slots_held())
-        band_held  = slot_ids(band.get_slots_held())
+        hotel_held, band_held = run_both(
+            lambda: slot_ids(hotel.get_slots_held()),
+            lambda: slot_ids(band.get_slots_held()),
+        )
     except Exception as e:
         print(f"  Could not read your current reservations: {e}")
         return
@@ -269,8 +273,10 @@ def reserve_earliest_match():
         # Re-read holdings before each booking attempt - they may have changed
         # if a previous loop iteration released something.
         try:
-            hotel_held = slot_ids(hotel.get_slots_held())
-            band_held  = slot_ids(band.get_slots_held())
+            hotel_held, band_held = run_both(
+                lambda: slot_ids(hotel.get_slots_held()),
+                lambda: slot_ids(band.get_slots_held()),
+            )
         except Exception as e:
             print(f"  Could not re-read reservations: {e}")
             return
@@ -337,14 +343,17 @@ def reserve_earliest_match():
         # Both sides confirmed - success
         print(f"\n  Slot {target} is now confirmed on both hotel and band.")
 
-        # Release the old confirmed pair now that the new one is secured
+        # Release the old confirmed pair in parallel now that the new one is secured
         if current_best is not None and current_best != target:
             print(f"  Releasing previous booking at slot {current_best}...")
-            safe_release(hotel, "hotel", current_best)
-            safe_release(band,  "band",  current_best)
+            run_both(
+                lambda s=current_best: safe_release(hotel, "hotel", s),
+                lambda s=current_best: safe_release(band,  "band",  s),
+            )
 
-        # Auto-clean any remaining stray reservations
+        # Auto-clean any remaining stray reservations, then update status
         _auto_cancel_unneeded(target)
+        status.update([target], [target])
         return
 
     print(f"  Could not secure a matching booking after {MAX_RETRIES} attempts.")
@@ -361,17 +370,31 @@ def _auto_cancel_unneeded(confirmed_slot: int):
     trigger this step manually.
     """
     try:
-        hotel_held = slot_ids(hotel.get_slots_held())
-        band_held  = slot_ids(band.get_slots_held())
+        hotel_held, band_held = run_both(
+            lambda: slot_ids(hotel.get_slots_held()),
+            lambda: slot_ids(band.get_slots_held()),
+        )
     except Exception:
-        return  # the confirmed booking is already secured
+        return  # non-critical; the confirmed booking is already secured
 
     extras_hotel = [s for s in hotel_held if s != confirmed_slot]
     extras_band  = [s for s in band_held  if s != confirmed_slot]
 
-    if extras_hotel or extras_band:
-        print("\n  Auto-cleaning stray reservations...")
-        for slot in extras_hotel:
+    if not extras_hotel and not extras_band:
+        return
+
+    print("\n  Auto-cleaning stray reservations...")
+    all_stray = sorted(set(extras_hotel) | set(extras_band))
+    for slot in all_stray:
+        h = slot in extras_hotel
+        b = slot in extras_band
+        if h and b:
+            run_both(
+                lambda s=slot: safe_release(hotel, "hotel", s),
+                lambda s=slot: safe_release(band,  "band",  s),
+            )
+        elif h:
             safe_release(hotel, "hotel", slot)
-        for slot in extras_band:
+        else:
             safe_release(band, "band", slot)
+            

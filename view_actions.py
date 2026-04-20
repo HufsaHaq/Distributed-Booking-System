@@ -8,29 +8,38 @@ Nothing in here modifies any reservation. These functions just fetch
 data and display it clearly. They're safe to run at any time.
 """
 
-from clients import hotel, band
-from cache   import get_available
-from helpers import slot_ids
+import time
+
+from clients  import hotel, band
+from cache    import get_available
+from helpers  import slot_ids
+from parallel import run_both
+import status
 
 
 def view_current_bookings():
     """
     Show all slots currently held on hotel and band, with match status.
 
-    Highlights confirmed pairs (same slot on both services) and lone
-    reservations that still need a match on the other service.
+    Fetches both services in parallel to halve the wait time.
     """
     print("\nChecking your current reservations...")
+    t0 = time.time()
 
     try:
-        hotel_held = slot_ids(hotel.get_slots_held())
-        band_held  = slot_ids(band.get_slots_held())
+        hotel_held, band_held = run_both(
+            lambda: slot_ids(hotel.get_slots_held()),
+            lambda: slot_ids(band.get_slots_held()),
+        )
     except Exception as e:
         print(f"  Could not retrieve your reservations: {e}")
         return
 
+    elapsed = time.time() - t0
+    status.update(hotel_held, band_held)
+
     if not hotel_held and not band_held:
-        print("  You have no reservations on either service.")
+        print(f"  You have no reservations on either service.  ({elapsed:.1f}s)")
         return
 
     def fmt(slots):
@@ -54,55 +63,65 @@ def view_current_bookings():
     if only_band:
         print(f"  Band only  (unmatched): {fmt(only_band)}")
 
+    print(f"\n  ({elapsed:.1f}s)")
+
 
 def view_available_slots():
     """
     Fetch live availability from both services and show the first 20 slots each.
 
-    Always hits the server (force_fresh=True) so the user gets current data.
+    Both fetches run in parallel. Always hits the server (force_fresh=True).
     """
     print("\nFetching the latest available slots from both services...")
+    t0 = time.time()
 
     try:
-        hotel_slots = get_available(hotel, "hotel", force_fresh=True)
-        band_slots  = get_available(band,  "band",  force_fresh=True)
+        hotel_slots, band_slots = run_both(
+            lambda: get_available(hotel, "hotel", force_fresh=True),
+            lambda: get_available(band,  "band",  force_fresh=True),
+        )
     except Exception as e:
         print(f"  Could not retrieve available slots: {e}")
         return
+
+    elapsed = time.time() - t0
 
     def fmt20(slots):
         return ", ".join(str(s) for s in slots[:20]) if slots else "none available"
 
     print(f"\n  First 20 available hotel slots: {fmt20(hotel_slots)}")
     print(f"  First 20 available band slots:  {fmt20(band_slots)}")
-    print(f"\n  (Hotel: {len(hotel_slots)} free in total | "
-          f"Band: {len(band_slots)} free in total)")
+    print(f"\n  Hotel: {len(hotel_slots)} free in total | "
+          f"Band: {len(band_slots)} free in total  ({elapsed:.1f}s)")
 
 
 def view_matching_slots():
     """
     Show the 5 earliest slots currently free on both hotel and band.
 
-    Uses the cache where available to reduce API calls - run option 2
-    first if you want fully up-to-date data.
+    Both fetches run in parallel. Uses the cache where available.
     """
     print("\nLooking for slots free on both hotel and band...")
+    t0 = time.time()
 
     try:
-        hotel_slots = get_available(hotel, "hotel")
-        band_slots  = get_available(band,  "band")
+        hotel_slots, band_slots = run_both(
+            lambda: get_available(hotel, "hotel"),
+            lambda: get_available(band,  "band"),
+        )
     except Exception as e:
         print(f"  Could not fetch availability: {e}")
         return
 
+    elapsed = time.time() - t0
     matching = sorted(set(hotel_slots) & set(band_slots))
 
     if not matching:
         print("  No slots are currently free on both services at the same time.")
-        print("  Availability changes constantly - try again in a moment.")
+        print("  Availability changes constantly — try again in a moment.")
         return
 
     print(f"\n  First 5 slots free on both services:")
     for slot in matching[:5]:
         print(f"    Slot {slot}")
-    print(f"\n  ({len(matching)} matching slots available in total.)")
+    print(f"\n  ({len(matching)} matching slots available in total  |  {elapsed:.1f}s)")
