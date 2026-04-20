@@ -39,13 +39,13 @@ def _cache_hint() -> str:
             parts.append(f"{service}: cached ({remaining}s left)")
         else:
             parts.append(f"{service}: cache expired")
-    return CYAN + "  Cache — " + " | ".join(parts) + RESET
+    return CYAN + "  Cache - " + " | ".join(parts) + RESET
 
 
 def show_menu():
     print()
     print(PINK + "=" * 55 + RESET)
-    print(BOLD + PINK + "          Wedding Planner — Booking Menu" + RESET)
+    print(BOLD + PINK + "          Wedding Planner - Booking Menu" + RESET)
     print(PINK + "=" * 55 + RESET)
     print(f"  {BOLD}Status:{RESET} {WHITE}{status.get()}{RESET}")
     print(PINK + "-" * 55 + RESET)

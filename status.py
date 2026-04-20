@@ -7,7 +7,7 @@ Any action that learns the current holdings (view, book, cancel) calls
 update() at the end. The menu just calls get() to read the stored string.
 """
 
-_status: str = "Not checked yet — select option 1 to view your reservations."
+_status: str = "Not checked yet - select option 1 to view your reservations."
 
 
 def update(hotel_held: list, band_held: list):
@@ -38,7 +38,7 @@ def update(hotel_held: list, band_held: list):
             parts.append(f"hotel: {', '.join(map(str, hotel_held))}")
         if band_held:
             parts.append(f"band: {', '.join(map(str, band_held))}")
-        _status = f"No confirmed match yet  |  Held — {', '.join(parts)}"
+        _status = f"No confirmed match yet  |  Held - {', '.join(parts)}"
     else:
         _status = "No reservations held"
 

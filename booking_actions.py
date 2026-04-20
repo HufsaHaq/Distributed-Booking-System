@@ -216,6 +216,7 @@ def reserve_earliest_match():
     print("\nSearching for the earliest slot free on both hotel and band...")
 
     try:
+        print("  [THREADED] Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
             lambda: slot_ids(hotel.get_slots_held()),
             lambda: slot_ids(band.get_slots_held()),
@@ -273,6 +274,7 @@ def reserve_earliest_match():
         # Re-read holdings before each booking attempt - they may have changed
         # if a previous loop iteration released something.
         try:
+            print("  [THREADED] Re-reading held slots from both services simultaneously...")
             hotel_held, band_held = run_both(
                 lambda: slot_ids(hotel.get_slots_held()),
                 lambda: slot_ids(band.get_slots_held()),
@@ -345,7 +347,7 @@ def reserve_earliest_match():
 
         # Release the old confirmed pair in parallel now that the new one is secured
         if current_best is not None and current_best != target:
-            print(f"  Releasing previous booking at slot {current_best}...")
+            print(f"  [THREADED] Releasing old booking (slot {current_best}) on hotel and band simultaneously...")
             run_both(
                 lambda s=current_best: safe_release(hotel, "hotel", s),
                 lambda s=current_best: safe_release(band,  "band",  s),
@@ -370,6 +372,7 @@ def _auto_cancel_unneeded(confirmed_slot: int):
     trigger this step manually.
     """
     try:
+        print("  [THREADED] Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
             lambda: slot_ids(hotel.get_slots_held()),
             lambda: slot_ids(band.get_slots_held()),
@@ -389,6 +392,7 @@ def _auto_cancel_unneeded(confirmed_slot: int):
         h = slot in extras_hotel
         b = slot in extras_band
         if h and b:
+            print(f"  [THREADED] Releasing stray slot {slot} on hotel and band simultaneously...")
             run_both(
                 lambda s=slot: safe_release(hotel, "hotel", s),
                 lambda s=slot: safe_release(band,  "band",  s),

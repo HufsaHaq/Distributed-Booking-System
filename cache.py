@@ -39,7 +39,7 @@ def get_available(api: reservationapi.ReservationApi,
         age = time.time() - cached["fetched_at"]
         if age < CACHE_MAX_AGE_SECONDS:
             remaining = int(CACHE_MAX_AGE_SECONDS - age)
-            print(f"  [CACHED] {service.title()} slots — "
+            print(f"  [CACHED] {service.title()} slots - "
                   f"using data fetched {int(age)}s ago, "
                   f"refreshes in {remaining}s "
                   f"(select 'View available slots' to force refresh)")

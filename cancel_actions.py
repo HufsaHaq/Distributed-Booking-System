@@ -73,7 +73,7 @@ def cancel_booking():
 
     # If cancelling both, do them in parallel
     if on_hotel and on_band:
-        print(f"  Cancelling slot {slot_id} on both services in parallel...")
+        print(f"  [THREADED] Cancelling slot {slot_id} on hotel and band simultaneously...")
         run_both(
             lambda: safe_release(hotel, "hotel", slot_id),
             lambda: safe_release(band,  "band",  slot_id),
@@ -102,6 +102,7 @@ def cancel_unneeded():
     print("\nChecking for unnecessary reservations...")
 
     try:
+        print("  [THREADED] Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
             lambda: slot_ids(hotel.get_slots_held()),
             lambda: slot_ids(band.get_slots_held()),
@@ -139,7 +140,7 @@ def cancel_unneeded():
         h = slot in to_drop_hotel
         b = slot in to_drop_band
         if h and b:
-            print(f"  Releasing slot {slot} from both services in parallel...")
+            print(f"  [THREADED] Releasing slot {slot} on hotel and band simultaneously...")
             run_both(
                 lambda s=slot: safe_release(hotel, "hotel", s),
                 lambda s=slot: safe_release(band,  "band",  s),

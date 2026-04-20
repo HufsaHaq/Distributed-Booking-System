@@ -27,6 +27,7 @@ def view_current_bookings():
     t0 = time.time()
 
     try:
+        print("  [THREADED] Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
             lambda: slot_ids(hotel.get_slots_held()),
             lambda: slot_ids(band.get_slots_held()),
@@ -76,6 +77,7 @@ def view_available_slots():
     t0 = time.time()
 
     try:
+        print("  [THREADED] Fetching availability from hotel and band simultaneously...")
         hotel_slots, band_slots = run_both(
             lambda: get_available(hotel, "hotel", force_fresh=True),
             lambda: get_available(band,  "band",  force_fresh=True),
@@ -105,6 +107,7 @@ def view_matching_slots():
     t0 = time.time()
 
     try:
+        print("  [THREADED] Fetching availability from hotel and band simultaneously...")
         hotel_slots, band_slots = run_both(
             lambda: get_available(hotel, "hotel"),
             lambda: get_available(band,  "band"),
