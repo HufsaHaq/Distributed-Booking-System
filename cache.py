@@ -66,6 +66,20 @@ def clear_cache() -> None:
     _cache["band"]  = None
 
 
+def clear_service_cache(service: str) -> None:
+    """
+    Discard the cached slot list for a single service only.
+
+    Use this after a booking or cancellation on one service so the other
+    service's cache remains valid - the other service's availability did
+    not change as a result of our action.
+
+    Args:
+        service: 'hotel' or 'band'.
+    """
+    _cache[service] = None
+
+
 def cache_ages() -> dict:
     """
     Return the age in seconds of each cached entry, or None if not cached.

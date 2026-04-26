@@ -11,7 +11,7 @@ user-facing logic.
 
 import time
 import reservationapi
-from cache      import clear_cache
+from cache      import clear_cache, clear_service_cache
 from exceptions import NotProcessedError
 
 
@@ -93,7 +93,7 @@ def safe_release(api: reservationapi.ReservationApi, service: str, slot_id: int)
     """
     try:
         api.release_slot(slot_id)
-        clear_cache()
+        clear_service_cache(service)
         print(f"  {service.title()} slot {slot_id} cancelled successfully.")
         return True
     except Exception as e:
@@ -133,7 +133,7 @@ def free_up_slot(api: reservationapi.ReservationApi,
           f"Releasing unmatched {service} slot {to_drop} to make room...")
     try:
         api.release_slot(to_drop)
-        clear_cache()
+        clear_service_cache(service)
         print(f"  {service.title()} slot {to_drop} released.")
         return True
     except Exception as e:

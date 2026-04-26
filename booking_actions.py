@@ -14,7 +14,7 @@ from exceptions import (
 )
 
 from clients  import hotel, band, MAX_RETRIES, DELAY
-from cache    import get_available, clear_cache
+from cache    import get_available, clear_cache, clear_service_cache
 from helpers  import slot_ids, safe_release, free_up_slot, get_held_with_retry
 from parallel import run_both
 from colours  import TAG_THREADED
@@ -91,7 +91,7 @@ def _book_hotel_only():
     print(f"\n  Reserving hotel slot {slot_id}...")
     try:
         hotel.reserve_slot(slot_id)
-        clear_cache()
+        clear_service_cache("hotel")
         print(f"  Hotel slot {slot_id} reserved.")
         print("  Note: you still need a matching band slot to confirm the wedding.")
     except SlotUnavailableError:
@@ -126,7 +126,7 @@ def _book_band_only():
     print(f"\n  Reserving band slot {slot_id}...")
     try:
         band.reserve_slot(slot_id)
-        clear_cache()
+        clear_service_cache("band")
         print(f"  Band slot {slot_id} reserved.")
         print("  Note: you still need a matching hotel slot to confirm the wedding.")
     except SlotUnavailableError:
@@ -172,7 +172,7 @@ def _book_matching():
     try:
         hotel.reserve_slot(slot_id)
         hotel_booked = True
-        clear_cache()
+        clear_service_cache("hotel")
         print(f"  Hotel slot {slot_id} reserved.")
     except SlotUnavailableError:
         print(f"  Slot {slot_id} is already taken on the hotel. "
@@ -192,7 +192,7 @@ def _book_matching():
     print(f"  Reserving band slot {slot_id}...")
     try:
         band.reserve_slot(slot_id)
-        clear_cache()
+        clear_service_cache("band")
         print(f"  Band slot {slot_id} reserved.")
         print(f"\n  Slot {slot_id} is now confirmed on both hotel and band.")
     except SlotUnavailableError:
@@ -310,7 +310,7 @@ def reserve_earliest_match():
         try:
             hotel.reserve_slot(target)
             hotel_booked = True
-            clear_cache()
+            clear_service_cache("hotel")
             print(f"  Hotel slot {target} reserved.")
         except SlotUnavailableError:
             wait = DELAY * (2 ** (attempt - 1))
@@ -340,7 +340,7 @@ def reserve_earliest_match():
         print(f"  Reserving band slot {target}...")
         try:
             band.reserve_slot(target)
-            clear_cache()
+            clear_service_cache("band")
             print(f"  Band slot {target} reserved.")
         except SlotUnavailableError:
             wait = DELAY * (2 ** (attempt - 1))
