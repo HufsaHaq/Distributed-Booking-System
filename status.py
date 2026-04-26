@@ -45,7 +45,7 @@ def update(hotel_held: list, band_held: list) -> None:
             parts.append(f"hotel: {', '.join(map(str, hotel_held))}")
         if band_held:
             parts.append(f"band: {', '.join(map(str, band_held))}")
-        _status = f"No confirmed match yet  |  Held — {', '.join(parts)}"
+        _status = f"No confirmed match yet  |  Held - {', '.join(parts)}"
     else:
         _status = "No reservations held"
 

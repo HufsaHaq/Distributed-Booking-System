@@ -134,7 +134,7 @@ def view_matching_slots() -> None:
 
     if not matching:
         print("  No slots are currently free on both services at the same time.")
-        print("  Availability changes constantly — try again in a moment.")
+        print("  Availability changes constantly - try again in a moment.")
         return
 
     print(f"\n  First 5 slots free on both services:")
