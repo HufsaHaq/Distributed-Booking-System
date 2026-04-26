@@ -57,6 +57,8 @@ def get_available(api: reservationapi.ReservationApi,
     raw   = api.get_slots_available()
     slots = sorted(int(s["id"]) for s in raw)
     _cache[service] = {"slots": slots, "fetched_at": time.time()}
+    print(f"  {TAG_LIVE} {service.title()} availability saved to cache "
+          f"({len(slots)} slots, refreshes in {CACHE_MAX_AGE_SECONDS}s).")
     return slots
 
 
