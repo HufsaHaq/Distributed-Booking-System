@@ -13,7 +13,7 @@ Usage:
 from concurrent.futures import ThreadPoolExecutor
 
 
-def run_both(fn_hotel, fn_band):
+def run_both(fn_hotel, fn_band) -> tuple:
     """
     Run fn_hotel and fn_band concurrently in separate threads.
 
@@ -23,6 +23,17 @@ def run_both(fn_hotel, fn_band):
     If either callable raises, the exception propagates from this function.
     The other thread still runs to completion first (the executor waits for
     all futures on exit), so we never leave a half-done operation in flight.
+
+    Args:
+        fn_hotel: Zero-argument function that performs the hotel API operation.
+        fn_band:  Zero-argument function that performs the band API operation.
+
+    Returns:
+        Tuple of (hotel_result, band_result) where each element is whatever
+        the corresponding function returned.
+
+    Raises:
+        Any exception raised by fn_hotel or fn_band.
     """
     with ThreadPoolExecutor(max_workers=2) as executor:
         future_hotel = executor.submit(fn_hotel)

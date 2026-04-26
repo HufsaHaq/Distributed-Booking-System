@@ -10,12 +10,19 @@ update() at the end. The menu just calls get() to read the stored string.
 _status: str = "Not checked yet - select option 1 to view your reservations."
 
 
-def update(hotel_held: list, band_held: list):
+def update(hotel_held: list, band_held: list) -> None:
     """
     Compute a summary string from the current holdings and store it.
 
     Call this whenever an action fetches the current slot holdings so the
     menu always reflects the most recent known state.
+
+    Args:
+        hotel_held: List of slot IDs currently held on the hotel service.
+        band_held:  List of slot IDs currently held on the band service.
+
+    Returns:
+        None. Updates the internal status string in place.
     """
     global _status
 
@@ -38,11 +45,16 @@ def update(hotel_held: list, band_held: list):
             parts.append(f"hotel: {', '.join(map(str, hotel_held))}")
         if band_held:
             parts.append(f"band: {', '.join(map(str, band_held))}")
-        _status = f"No confirmed match yet  |  Held - {', '.join(parts)}"
+        _status = f"No confirmed match yet  |  Held — {', '.join(parts)}"
     else:
         _status = "No reservations held"
 
 
 def get() -> str:
-    """Return the current status summary string."""
+    """
+    Return the current status summary string.
+
+    Returns:
+        A string describing the last-known reservation state.
+    """
     return _status

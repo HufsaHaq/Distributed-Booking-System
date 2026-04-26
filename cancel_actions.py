@@ -1,32 +1,58 @@
 #!/usr/bin/env python3
 """
-cancel_actions
-
 Reservation-cancelling menu actions - options 4 and 7.
 
 Option 4 lets the user manually pick a slot to cancel.
 Option 7 automatically drops everything except the best confirmed pair.
+
+Both options ask for confirmation before making any destructive API call,
+so cannot accidentally lose a confirmed booking.
 """
 
 from clients  import hotel, band
-from helpers  import slot_ids, safe_release
+from helpers  import get_held_with_retry, safe_release
 from parallel import run_both
+from colours  import TAG_THREADED, PINK, YELLOW, RESET, BOLD
 import status
 
 
-def cancel_booking():
+def _confirm(prompt: str) -> bool:
+    """
+    Ask the user to confirm a destructive action.
+
+    Args:
+        prompt: The confirmation question to display.
+
+    Returns:
+        True if the user typed 'y' or 'yes', False for anything else.
+    """
+    answer = input(f"\n  {YELLOW}{prompt} [y/n]: {RESET}").strip().lower()
+    return answer in ("y", "yes")
+
+
+def cancel_booking() -> None:
     """
     Let the user cancel a reservation on the hotel, band, or both.
 
-    Shows current holdings first so the user knows what is available to cancel.
-    Fetches both services in parallel.
+    Fetches current holdings first so the user can see what is cancellable,
+    then validates the chosen slot against those holdings before touching the
+    API. Asks for confirmation before any destructive call. If the user enters
+    a slot they do not hold, they are told clearly and returned to the menu
+    without making any API call.
+
+    If cancelling the same slot on both services, the two release calls run
+    in parallel.
+
+    Returns:
+        None. Prints results directly to stdout.
     """
     print("\nCancel a reservation")
 
     try:
+        print(f"  {TAG_THREADED} Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
-            lambda: slot_ids(hotel.get_slots_held()),
-            lambda: slot_ids(band.get_slots_held()),
+            lambda: get_held_with_retry(hotel, "hotel"),
+            lambda: get_held_with_retry(band,  "band"),
         )
     except Exception as e:
         print(f"  Could not retrieve your reservations: {e}")
@@ -39,8 +65,8 @@ def cancel_booking():
     def fmt(slots):
         return ", ".join(f"Slot {s}" for s in slots) if slots else "none"
 
-    print(f"\n  Hotel slots: {fmt(hotel_held)}")
-    print(f"  Band  slots: {fmt(band_held)}")
+    print(f"\n  Hotel slots held: {fmt(hotel_held)}")
+    print(f"  Band  slots held: {fmt(band_held)}")
 
     raw = input("\nEnter the slot number to cancel (or press Enter to go back): ").strip()
     if not raw:
@@ -57,12 +83,14 @@ def cancel_booking():
     on_band  = slot_id in band_held
 
     if not on_hotel and not on_band:
-        print(f"  You do not hold slot {slot_id} on either service.")
+        print(f"\n  You do not hold slot {slot_id} on either service.")
+        print(f"  Hotel slots held: {fmt(hotel_held)}")
+        print(f"  Band  slots held: {fmt(band_held)}")
         return
 
     if on_hotel and on_band:
         choice = input(
-            f"  Slot {slot_id} is held on both services. "
+            f"\n  Slot {slot_id} is held on both services. "
             "Cancel on hotel, band, or both? [hotel/band/both]: "
         ).strip().lower()
         on_hotel = choice in ("hotel", "both")
@@ -71,9 +99,20 @@ def cancel_booking():
             print("  Unrecognised choice. Nothing cancelled.")
             return
 
-    # If cancelling both, do them in parallel
+    # Show what will be cancelled and ask for confirmation
+    targets = []
+    if on_hotel:
+        targets.append(f"hotel slot {slot_id}")
+    if on_band:
+        targets.append(f"band slot {slot_id}")
+    target_str = " and ".join(targets)
+
+    if not _confirm(f"Cancel {target_str}?"):
+        print("  Cancelled - nothing was changed.")
+        return
+
     if on_hotel and on_band:
-        print(f"  [THREADED] Cancelling slot {slot_id} on hotel and band simultaneously...")
+        print(f"  {TAG_THREADED} Cancelling slot {slot_id} on hotel and band simultaneously...")
         run_both(
             lambda: safe_release(hotel, "hotel", slot_id),
             lambda: safe_release(band,  "band",  slot_id),
@@ -81,31 +120,34 @@ def cancel_booking():
     elif on_hotel:
         print(f"  Cancelling hotel slot {slot_id}...")
         safe_release(hotel, "hotel", slot_id)
-    elif on_band:
+    else:
         print(f"  Cancelling band slot {slot_id}...")
         safe_release(band, "band", slot_id)
 
-    # Update status after we know what changed
     remaining_hotel = [s for s in hotel_held if not (on_hotel and s == slot_id)]
     remaining_band  = [s for s in band_held  if not (on_band  and s == slot_id)]
     status.update(remaining_hotel, remaining_band)
 
 
-def cancel_unneeded():
+def cancel_unneeded() -> None:
     """
     Release everything except the earliest confirmed matched pair.
 
     A reservation is only 'needed' if it belongs to the lowest-numbered slot
-    confirmed on both hotel and band. Everything else is dropped.
-    Matched-pair releases run in parallel.
+    that is confirmed on both hotel and band. Everything else is dropped.
+    Asks for confirmation before making any destructive call.
+    Matched-pair releases run in parallel to halve the wait time.
+
+    Returns:
+        None. Prints results directly to stdout.
     """
     print("\nChecking for unnecessary reservations...")
 
     try:
-        print("  [THREADED] Querying hotel and band held slots simultaneously...")
+        print(f"  {TAG_THREADED} Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
-            lambda: slot_ids(hotel.get_slots_held()),
-            lambda: slot_ids(band.get_slots_held()),
+            lambda: get_held_with_retry(hotel, "hotel"),
+            lambda: get_held_with_retry(band,  "band"),
         )
     except Exception as e:
         print(f"  Could not retrieve your reservations: {e}")
@@ -129,18 +171,31 @@ def cancel_unneeded():
     to_drop_band  = [s for s in band_held  if s != best_match]
 
     if not to_drop_hotel and not to_drop_band:
-        print("  Nothing to cancel — your reservations are already tidy.")
+        print(f"  Nothing to cancel - slot {best_match} is your only booking "
+              "and it is already confirmed on both services.")
         status.update(hotel_held, band_held)
         return
 
-    # Release each stray hotel+band pair for the same slot in parallel,
-    # then handle any leftovers that are only on one service.
+    # Show the user exactly what will be kept and what will be dropped
+    def fmt(slots):
+        return ", ".join(f"Slot {s}" for s in slots) if slots else "none"
+
+    print(f"\n  {BOLD}Will keep:{RESET}  slot {best_match} (confirmed on hotel + band)")
+    if to_drop_hotel:
+        print(f"  {BOLD}Will drop:{RESET}  hotel - {fmt(to_drop_hotel)}")
+    if to_drop_band:
+        print(f"  {BOLD}Will drop:{RESET}  band  - {fmt(to_drop_band)}")
+
+    if not _confirm("Proceed with cancellation?"):
+        print("  Cancelled - nothing was changed.")
+        return
+
     all_stray = sorted(set(to_drop_hotel) | set(to_drop_band))
     for slot in all_stray:
         h = slot in to_drop_hotel
         b = slot in to_drop_band
         if h and b:
-            print(f"  [THREADED] Releasing slot {slot} on hotel and band simultaneously...")
+            print(f"  {TAG_THREADED} Releasing slot {slot} on hotel and band simultaneously...")
             run_both(
                 lambda s=slot: safe_release(hotel, "hotel", s),
                 lambda s=slot: safe_release(band,  "band",  s),

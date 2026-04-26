@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """
-booking
-
 Wedding Planner - main entry point.
 
 Runs the menu loop. All business logic lives in actions.py; all API
@@ -75,7 +73,18 @@ MENU_ACTIONS = {
 
 
 def main():
-    print(BOLD + PINK + "\nWelcome to the Wedding Planner Booking System." + RESET)
+    print(BOLD + PINK + "\n" + "=" * 55 + RESET)
+    print(BOLD + PINK + "   Wedding Planner - Distributed Booking System" + RESET)
+    print(PINK + "=" * 55 + RESET)
+    print(WHITE +
+          "  Coordinates hotel and band reservations via two\n"
+          "  independent REST APIs, competing in real time with\n"
+          "  other clients for the earliest available slot.\n" + RESET)
+    print(f"  {CYAN}Slots:{RESET}   1–550  (slot 1 = earliest date)")
+    print(f"  {CYAN}Limit:{RESET}   2 reservations per service at once")
+    print(f"  {CYAN}Goal:{RESET}    same slot confirmed on hotel AND band")
+    print(PINK + "=" * 55 + RESET)
+    print()
     print("Checking your existing reservations on startup...")
     view_current_bookings()
 

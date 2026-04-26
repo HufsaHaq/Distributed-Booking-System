@@ -12,6 +12,7 @@ and always tells the user clearly whether they are seeing live or cached data.
 
 import time
 import reservationapi
+from colours import TAG_LIVE, TAG_CACHED
 
 CACHE_MAX_AGE_SECONDS = 30
 
@@ -32,6 +33,14 @@ def get_available(api: reservationapi.ReservationApi,
     Serves from cache if the data is less than CACHE_MAX_AGE_SECONDS old,
     unless force_fresh=True is requested (e.g. before making a booking).
     Always tells the user clearly which source the data is from.
+
+    Args:
+        api:         The ReservationApi instance to query if a live fetch is needed.
+        service:     Name of the service ('hotel' or 'band'), used for display.
+        force_fresh: If True, bypass the cache and always fetch from the server.
+
+    Returns:
+        Sorted list of available slot IDs as integers.
     """
     cached = _cache[service]
 
@@ -39,20 +48,19 @@ def get_available(api: reservationapi.ReservationApi,
         age = time.time() - cached["fetched_at"]
         if age < CACHE_MAX_AGE_SECONDS:
             remaining = int(CACHE_MAX_AGE_SECONDS - age)
-            print(f"  [CACHED] {service.title()} slots - "
-                  f"using data fetched {int(age)}s ago, "
-                  f"refreshes in {remaining}s "
+            print(f"  {TAG_CACHED} {service.title()} slots - "
+                  f"using data fetched {int(age)}s ago, refreshes in {remaining}s "
                   f"(select 'View available slots' to force refresh)")
             return cached["slots"]
 
-    print(f"  [LIVE]   Fetching {service} availability from server...")
+    print(f"  {TAG_LIVE} Fetching {service} availability from server...")
     raw   = api.get_slots_available()
     slots = sorted(int(s["id"]) for s in raw)
     _cache[service] = {"slots": slots, "fetched_at": time.time()}
     return slots
 
 
-def clear_cache():
+def clear_cache() -> None:
     """Discard both cached slot lists so the next fetch goes to the server."""
     _cache["hotel"] = None
     _cache["band"]  = None
@@ -61,7 +69,10 @@ def clear_cache():
 def cache_ages() -> dict:
     """
     Return the age in seconds of each cached entry, or None if not cached.
-    Used by the menu to show a cache status hint.
+
+    Returns:
+        Dict mapping service name to age in seconds (int), or None if that
+        service has no cached data. Example: {'hotel': 12, 'band': None}.
     """
     now = time.time()
     return {

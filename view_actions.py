@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """
-view_actions
-
 Read-only menu actions - options 1, 2, and 5.
 
 Nothing in here modifies any reservation. These functions just fetch
@@ -12,25 +10,32 @@ import time
 
 from clients  import hotel, band
 from cache    import get_available
-from helpers  import slot_ids
+from helpers  import get_held_with_retry
 from parallel import run_both
+from colours  import TAG_THREADED
 import status
 
 
-def view_current_bookings():
+def view_current_bookings() -> None:
     """
     Show all slots currently held on hotel and band, with match status.
 
-    Fetches both services in parallel to halve the wait time.
+    Fetches both services in parallel to halve the wait time. Uses
+    get_held_with_retry so a 404 response (request not yet processed)
+    is retried rather than raised as an error. Updates the global status
+    line once the holdings are known.
+
+    Returns:
+        None. Prints results directly to stdout.
     """
     print("\nChecking your current reservations...")
     t0 = time.time()
 
     try:
-        print("  [THREADED] Querying hotel and band held slots simultaneously...")
+        print(f"  {TAG_THREADED} Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
-            lambda: slot_ids(hotel.get_slots_held()),
-            lambda: slot_ids(band.get_slots_held()),
+            lambda: get_held_with_retry(hotel, "hotel"),
+            lambda: get_held_with_retry(band,  "band"),
         )
     except Exception as e:
         print(f"  Could not retrieve your reservations: {e}")
@@ -67,17 +72,21 @@ def view_current_bookings():
     print(f"\n  ({elapsed:.1f}s)")
 
 
-def view_available_slots():
+def view_available_slots() -> None:
     """
     Fetch live availability from both services and show the first 20 slots each.
 
-    Both fetches run in parallel. Always hits the server (force_fresh=True).
+    Always bypasses the cache (force_fresh=True) so the user sees current data.
+    Both fetches run in parallel. Updates the cache as a side effect.
+
+    Returns:
+        None. Prints results directly to stdout.
     """
     print("\nFetching the latest available slots from both services...")
     t0 = time.time()
 
     try:
-        print("  [THREADED] Fetching availability from hotel and band simultaneously...")
+        print(f"  {TAG_THREADED} Fetching availability from hotel and band simultaneously...")
         hotel_slots, band_slots = run_both(
             lambda: get_available(hotel, "hotel", force_fresh=True),
             lambda: get_available(band,  "band",  force_fresh=True),
@@ -97,17 +106,21 @@ def view_available_slots():
           f"Band: {len(band_slots)} free in total  ({elapsed:.1f}s)")
 
 
-def view_matching_slots():
+def view_matching_slots() -> None:
     """
     Show the 5 earliest slots currently free on both hotel and band.
 
-    Both fetches run in parallel. Uses the cache where available.
+    Uses the cache where available to reduce API calls. Both fetches run
+    in parallel.
+
+    Returns:
+        None. Prints results directly to stdout.
     """
     print("\nLooking for slots free on both hotel and band...")
     t0 = time.time()
 
     try:
-        print("  [THREADED] Fetching availability from hotel and band simultaneously...")
+        print(f"  {TAG_THREADED} Fetching availability from hotel and band simultaneously...")
         hotel_slots, band_slots = run_both(
             lambda: get_available(hotel, "hotel"),
             lambda: get_available(band,  "band"),
