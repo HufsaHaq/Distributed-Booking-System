@@ -106,9 +106,11 @@ class ReservationApi:
         for attempt in range(1, self.retries + 1):
             response = requests.request(method, url, headers=self._headers())
 
-            # Pause before acting on the response to respect the rate limit.
-            # This also acts as the inter-retry delay.
-            time.sleep(self.delay)
+            # Exponential backoff: wait longer on each successive retry to reduce
+            # server load. Attempt 1 → base delay, attempt 2 → 2×, attempt 3 → 4×.
+            # Always at least self.delay to satisfy the 1-second rate limit.
+            backoff = self.delay * (2 ** (attempt - 1))
+            time.sleep(backoff)
 
             if response.status_code == 200:
                 return response.json()
@@ -117,7 +119,7 @@ class ReservationApi:
                 warnings.warn(
                     f"Attempt {attempt}/{self.retries}: server returned "
                     f"{response.status_code} ({self._reason(response)}). "
-                    "Will retry..."
+                    f"Retrying in {self.delay * (2 ** attempt):.0f}s..."
                 )
                 continue
 

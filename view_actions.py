@@ -38,7 +38,7 @@ def view_current_bookings() -> None:
             lambda: get_held_with_retry(band,  "band"),
         )
     except Exception as e:
-        print(f"  Could not retrieve your reservations: {e}")
+        print("  Could not retrieve your reservations - the server may be temporarily unavailable. Please try again.")
         return
 
     elapsed = time.time() - t0
@@ -92,7 +92,7 @@ def view_available_slots() -> None:
             lambda: get_available(band,  "band",  force_fresh=True),
         )
     except Exception as e:
-        print(f"  Could not retrieve available slots: {e}")
+        print("  Could not fetch slot availability - the server may be temporarily unavailable. Please try again.")
         return
 
     elapsed = time.time() - t0
@@ -126,7 +126,7 @@ def view_matching_slots() -> None:
             lambda: get_available(band,  "band"),
         )
     except Exception as e:
-        print(f"  Could not fetch availability: {e}")
+        print("  Could not fetch slot availability - the server may be temporarily unavailable. Please try again.")
         return
 
     elapsed = time.time() - t0

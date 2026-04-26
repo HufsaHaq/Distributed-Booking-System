@@ -48,16 +48,26 @@ def book_specific_slot():
 
 
 def _prompt_slot_number():
-    """Ask the user for a slot number. Returns the integer or None if cancelled."""
-    raw = input("Enter the slot number (or press Enter to cancel): ").strip()
+    """
+    Ask the user for a slot number in the range 1–550.
+
+    Returns:
+        The slot number as an integer, or None if the user cancelled or
+        entered an invalid value.
+    """
+    raw = input("Enter the slot number 1–550 (or press Enter to cancel): ").strip()
     if not raw:
         print("  Cancelled.")
         return None
     try:
-        return int(raw)
+        slot = int(raw)
     except ValueError:
-        print(f"  '{raw}' is not a valid number. Please enter a whole number.")
+        print(f"  '{raw}' is not a valid number. Please enter a whole number between 1 and 550.")
         return None
+    if not 1 <= slot <= 550:
+        print(f"  Slot {slot} is out of range. Valid slots are 1 to 550.")
+        return None
+    return slot
 
 
 def _book_hotel_only():
@@ -72,7 +82,7 @@ def _book_hotel_only():
         else:
             print("\n  No hotel slots are currently available.")
     except Exception as e:
-        print(f"\n  Could not fetch hotel availability: {e}")
+        print("\n  Could not fetch hotel availability - the server may be temporarily unavailable.")
 
     slot_id = _prompt_slot_number()
     if slot_id is None:
@@ -92,7 +102,7 @@ def _book_hotel_only():
     except BadSlotError:
         print(f"  Slot {slot_id} does not exist (valid range: 1–550).")
     except Exception as e:
-        print(f"  Hotel booking failed: {e}")
+        print("  The hotel reservation did not go through - the server may be temporarily unavailable. Please try again.")
 
 
 def _book_band_only():
@@ -107,7 +117,7 @@ def _book_band_only():
         else:
             print("\n  No band slots are currently available.")
     except Exception as e:
-        print(f"\n  Could not fetch band availability: {e}")
+        print("\n  Could not fetch band availability - the server may be temporarily unavailable.")
 
     slot_id = _prompt_slot_number()
     if slot_id is None:
@@ -127,7 +137,7 @@ def _book_band_only():
     except BadSlotError:
         print(f"  Slot {slot_id} does not exist (valid range: 1–550).")
     except Exception as e:
-        print(f"  Band booking failed: {e}")
+        print("  The band reservation did not go through - the server may be temporarily unavailable. Please try again.")
 
 
 def _book_matching():
@@ -150,7 +160,7 @@ def _book_matching():
         else:
             print("\n  No slots are currently free on both services simultaneously.")
     except Exception as e:
-        print(f"\n  Could not fetch availability: {e}")
+        print("\n  Could not fetch availability - the server may be temporarily unavailable.")
 
     slot_id = _prompt_slot_number()
     if slot_id is None:
@@ -173,7 +183,7 @@ def _book_matching():
     except BadSlotError:
         print(f"  Slot {slot_id} does not exist (valid range: 1–550).")
     except Exception as e:
-        print(f"  Hotel booking failed: {e}")
+        print("  The hotel reservation did not go through - the server may be temporarily unavailable.")
 
     if not hotel_booked:
         return
@@ -198,7 +208,7 @@ def _book_matching():
         print(f"  Releasing hotel slot {slot_id}...")
         safe_release(hotel, "hotel", slot_id)
     except Exception as e:
-        print(f"  Band booking failed: {e}")
+        print("  The band reservation did not go through - the server may be temporarily unavailable.")
         print(f"  Releasing hotel slot {slot_id} to avoid a dangling reservation...")
         safe_release(hotel, "hotel", slot_id)
 
@@ -224,7 +234,7 @@ def reserve_earliest_match():
             lambda: get_held_with_retry(band,  "band"),
         )
     except Exception as e:
-        print(f"  Could not read your current reservations: {e}")
+        print("  Could not read your current reservations - the server may be temporarily unavailable.")
         return
 
     matched_now  = sorted(set(hotel_held) & set(band_held))
@@ -241,21 +251,23 @@ def reserve_earliest_match():
             hotel_avail = get_available(hotel, "hotel", force_fresh=True)
             band_avail  = get_available(band,  "band",  force_fresh=True)
         except Exception as e:
-            print(f"  Could not fetch availability "
-                  f"(attempt {attempt}/{MAX_RETRIES}): {e}")
+            wait = DELAY * (2 ** (attempt - 1))
+            print(f"  Could not fetch availability (attempt {attempt}/{MAX_RETRIES}): "
+                  f"the server may be temporarily unavailable.")
             if attempt < MAX_RETRIES:
-                print(f"  Retrying in {DELAY:.0f}s...")
-                time.sleep(DELAY)
+                print(f"  Waiting {wait:.0f}s before retrying...")
+                time.sleep(wait)
             continue
 
         matching = sorted(set(hotel_avail) & set(band_avail))
 
         if not matching:
             if attempt < MAX_RETRIES:
-                print(f"  No matching slots available right now "
+                wait = DELAY * (2 ** (attempt - 1))
+                print(f"  No slots are free on both services right now "
                       f"(attempt {attempt}/{MAX_RETRIES}). "
-                      f"Retrying in {DELAY:.0f}s...")
-                time.sleep(DELAY)
+                      f"Waiting {wait:.0f}s and trying again...")
+                time.sleep(wait)
                 continue
             else:
                 print(f"  No matching slots found after {MAX_RETRIES} attempts.")
@@ -283,7 +295,7 @@ def reserve_earliest_match():
                 lambda: get_held_with_retry(band,  "band"),
             )
         except Exception as e:
-            print(f"  Could not re-read reservations: {e}")
+            print("  Could not re-read reservations - the server may be temporarily unavailable.")
             return
 
         # Make room on hotel if at the 2-slot cap
@@ -301,17 +313,20 @@ def reserve_earliest_match():
             clear_cache()
             print(f"  Hotel slot {target} reserved.")
         except SlotUnavailableError:
-            print(f"  Slot {target} was just taken on the hotel. "
-                  f"Retrying (attempt {attempt}/{MAX_RETRIES})...")
+            wait = DELAY * (2 ** (attempt - 1))
+            print(f"  Slot {target} was just taken by another client on the hotel.")
             if attempt < MAX_RETRIES:
-                time.sleep(DELAY)
+                print(f"  Waiting {wait:.0f}s then trying the next best slot "
+                      f"(attempt {attempt}/{MAX_RETRIES})...")
+                time.sleep(wait)
             continue
         except ReservationLimitError:
-            print("  Hit the hotel reservation limit unexpectedly. "
-                  "Use option 7 to clean up first.")
+            print("  You are already holding the maximum of 2 hotel reservations. "
+                  "Use option 7 to cancel unnecessary ones first.")
             return
         except Exception as e:
-            print(f"  Hotel booking failed: {e}")
+            print(f"  The hotel reservation did not go through. "
+                  f"The server said: {e}")
             return
 
         # Make room on band if at the 2-slot cap
@@ -328,20 +343,21 @@ def reserve_earliest_match():
             clear_cache()
             print(f"  Band slot {target} reserved.")
         except SlotUnavailableError:
-            print(f"  Slot {target} was just taken on the band.")
-            print(f"  Releasing hotel slot {target} and retrying "
-                  f"(attempt {attempt}/{MAX_RETRIES})...")
+            wait = DELAY * (2 ** (attempt - 1))
+            print(f"  Slot {target} was just taken by another client on the band.")
+            print(f"  Releasing the hotel reservation and waiting {wait:.0f}s "
+                  f"before trying again (attempt {attempt}/{MAX_RETRIES})...")
             safe_release(hotel, "hotel", target)
             if attempt < MAX_RETRIES:
-                time.sleep(DELAY)
+                time.sleep(wait)
             continue
         except ReservationLimitError:
-            print("  Hit the band reservation limit unexpectedly.")
-            print(f"  Releasing hotel slot {target}...")
+            print("  You are already holding the maximum of 2 band reservations.")
+            print(f"  Releasing hotel slot {target} - use option 7 to clean up, then try again.")
             safe_release(hotel, "hotel", target)
             return
         except Exception as e:
-            print(f"  Band booking failed: {e}")
+            print("  The band reservation did not go through - the server may be temporarily unavailable.")
             safe_release(hotel, "hotel", target)
             return
 
@@ -350,7 +366,7 @@ def reserve_earliest_match():
 
         # Release the old confirmed pair in parallel now that the new one is secured
         if current_best is not None and current_best != target:
-            print(f"  [THREADED] Releasing old booking (slot {current_best}) on hotel and band simultaneously...")
+            print(f"  {TAG_THREADED} Releasing old booking (slot {current_best}) on hotel and band simultaneously...")
             run_both(
                 lambda s=current_best: safe_release(hotel, "hotel", s),
                 lambda s=current_best: safe_release(band,  "band",  s),

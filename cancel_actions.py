@@ -55,7 +55,7 @@ def cancel_booking() -> None:
             lambda: get_held_with_retry(band,  "band"),
         )
     except Exception as e:
-        print(f"  Could not retrieve your reservations: {e}")
+        print("  Could not retrieve your reservations - the server may be temporarily unavailable. Please try again.")
         return
 
     if not hotel_held and not band_held:
@@ -150,7 +150,7 @@ def cancel_unneeded() -> None:
             lambda: get_held_with_retry(band,  "band"),
         )
     except Exception as e:
-        print(f"  Could not retrieve your reservations: {e}")
+        print("  Could not retrieve your reservations - the server may be temporarily unavailable. Please try again.")
         return
 
     if not hotel_held and not band_held:

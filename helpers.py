@@ -40,7 +40,8 @@ def get_held_with_retry(api: reservationapi.ReservationApi, service: str) -> lis
     The spec notes that requests may not be processed in the order they are
     received. A 404 on get_slots_held() can legitimately occur right after
     a reservation is made if the server has not yet processed it. Rather than
-    propagating that error, we retry up to MAX_RETRIES times.
+    propagating that error, we retry with exponential backoff up to MAX_RETRIES
+    times - doubling the wait on each attempt to reduce server load.
 
     Args:
         api:     The ReservationApi instance to query.
@@ -62,9 +63,14 @@ def get_held_with_retry(api: reservationapi.ReservationApi, service: str) -> lis
             return slot_ids(api.get_slots_held())
         except NotProcessedError:
             if attempt < MAX_RETRIES:
-                print(f"  {TAG_RETRY} {service.title()} held-slot query returned 404 "
-                      f"(not yet processed). Retrying {attempt}/{MAX_RETRIES}...")
-                time.sleep(DELAY)
+                # Exponential backoff: the server may still be processing a
+                # recent reservation - wait progressively longer before retrying.
+                wait = DELAY * (2 ** (attempt - 1))
+                print(f"  {TAG_RETRY} The {service} server has not finished "
+                      f"processing the last request. "
+                      f"Retrying in {wait:.0f}s "
+                      f"(attempt {attempt}/{MAX_RETRIES})...")
+                time.sleep(wait)
             else:
                 raise
 
@@ -91,7 +97,7 @@ def safe_release(api: reservationapi.ReservationApi, service: str, slot_id: int)
         print(f"  {service.title()} slot {slot_id} cancelled successfully.")
         return True
     except Exception as e:
-        print(f"  Could not cancel {service} slot {slot_id}: {e}")
+        print(f"  Could not cancel {service} slot {slot_id} - the server may be temporarily unavailable.")
         return False
 
 
@@ -131,5 +137,5 @@ def free_up_slot(api: reservationapi.ReservationApi,
         print(f"  {service.title()} slot {to_drop} released.")
         return True
     except Exception as e:
-        print(f"  Could not release {service} slot {to_drop}: {e}")
+        print(f"  Could not release {service} slot {to_drop} - the server may be temporarily unavailable.")
         return False
