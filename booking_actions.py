@@ -218,7 +218,7 @@ def reserve_earliest_match():
     attempt_used = 0
 
     try:
-        print("  {TAG_THREADED} Querying hotel and band held slots simultaneously...")
+        print(f"  {TAG_THREADED} Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
             lambda: get_held_with_retry(hotel, "hotel"),
             lambda: get_held_with_retry(band,  "band"),
@@ -277,7 +277,7 @@ def reserve_earliest_match():
         # Re-read holdings before each booking attempt - they may have changed
         # if a previous loop iteration released something.
         try:
-            print("  {TAG_THREADED} Re-reading held slots from both services simultaneously...")
+            print(f"  {TAG_THREADED} Re-reading held slots from both services simultaneously...")
             hotel_held, band_held = run_both(
                 lambda: get_held_with_retry(hotel, "hotel"),
                 lambda: get_held_with_retry(band,  "band"),
@@ -379,7 +379,7 @@ def _auto_cancel_unneeded(confirmed_slot: int):
     trigger this step manually.
     """
     try:
-        print("  {TAG_THREADED} Querying hotel and band held slots simultaneously...")
+        print(f" {TAG_THREADED} Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
             lambda: get_held_with_retry(hotel, "hotel"),
             lambda: get_held_with_retry(band,  "band"),

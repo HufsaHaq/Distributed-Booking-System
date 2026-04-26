@@ -1,9 +1,8 @@
 # Wedding Planner - Booking System
 
 A command-line client for coordinating hotel and band reservations for a wedding.
-It talks to two separate REST APIs and makes sure both are booked on the same slot number.
-
-
+Talks to two independent REST APIs and ensures both are booked on the same slot number,
+competing in real time with other clients for the earliest available date.
 
 ## How to run
 
@@ -16,23 +15,22 @@ chmod +x booking.py
 ./booking.py
 ```
 
-
-
 ## File structure
 
 ```
-booking.py           ← Run this. Entry point and menu loop.
-view_actions.py      ← Menu options 1, 2, 5  (read-only, nothing gets changed)
-booking_actions.py   ← Menu options 3, 6     (creates reservations)
-cancel_actions.py    ← Menu options 4, 7     (cancels reservations)
-clients.py           ← Loads config and creates the hotel/band API objects
-cache.py             ← Short-term cache for available slot lists
-helpers.py           ← Small utilities shared across the action files
-parallel.py          ← Runs hotel and band API calls concurrently
-status.py            ← Tracks current booking state for the menu status line
-reservationapi.py    ← Low-level HTTP wrapper (provided - handles retries + delays)
-exceptions.py        ← Custom exceptions for API error codes (provided)
-api.ini              ← API URLs and keys 
+booking.py           - Run this. Entry point and menu loop.
+view_actions.py      - Menu options 1, 2, 5  (read-only, nothing gets changed)
+booking_actions.py   - Menu options 3, 6     (creates reservations)
+cancel_actions.py    - Menu options 4, 7     (cancels reservations)
+colours.py           - ANSI colour codes and output tags shared across all files
+clients.py           - Loads config and creates the hotel/band API objects
+cache.py             - Short-term cache for available slot lists
+helpers.py           - Utilities: slot parsing, safe release, 404-retry logic
+parallel.py          - Runs hotel and band API calls concurrently
+status.py            - Tracks current booking state for the menu status line
+reservationapi.py    - Low-level HTTP wrapper (provided — handles retries + delays)
+exceptions.py        - Custom exceptions for API error codes (provided)
+api.ini              - API URLs and keys (keep this private)
 ```
 
 ---
@@ -46,165 +44,207 @@ api.ini              ← API URLs and keys
 | 3 | Book a specific slot (submenu: hotel only / band only / both) |
 | 4 | Cancel a reservation |
 | 5 | View first 5 slots free on both services simultaneously |
-| 6 | Reserve the earliest matching slot (with retry and auto-cleanup) |
+| 6 | Reserve the earliest matching slot (automated, with retry and auto-cleanup) |
 | 7 | Cancel all unnecessary reservations |
 | 8 | Clear screen |
 | 9 | Exit |
+
+After each option completes, the program pauses and asks you to press Enter before
+redrawing the menu  giving  time to read the output before it scrolls away.
+
+
+## Output tags
+
+Every line of output is prefixed with a colour-coded tag so it is immediately
+clear what the program is doing:
+
+| Tag | Colour | Meaning |
+|-----|--------|---------|
+| `[LIVE]` | Cyan | Data fetched fresh from the server right now |
+| `[CACHED]` | Yellow | Data served from the in-memory cache (shows time remaining) |
+| `[THREADED]` | Green | Hotel and band API calls running simultaneously in parallel |
+| `[WARNING]` | Red | Server returned a 5xx error — will retry |
+| `[RETRY]` | Red | Retrying a held-slot query that returned 404 (not yet processed) |
 
 ---
 
 ## What each file does
 
 ### `booking.py`
-The entry point. Displays the menu, reads the user's choice, and calls the
-right function. 
+The entry point. Shows a startup banner explaining the system, then automatically
+checks your current reservations before displaying the menu.
 
-On startup it automatically shows your current reservations.
+The menu shows two live pieces of information on every refresh with no extra API calls:
+- **Status line** — last-known booking state, e.g. `Best confirmed booking: Slot 14 (hotel + band)`.
+- **Cache hint** — seconds remaining before each service's slot cache expires.
 
-The menu header shows two live pieces of information on every refresh:
-- **Status line** - the last-known booking state (e.g. "Best confirmed booking: Slot 14 (hotel + band)"), updated after every action that touches reservations. Reads from `status.py` with no extra API calls.
-- **Cache hint** - how many seconds remain before each service's cached slot list expires (e.g. "hotel: cached (22s left) | band: no cache"). Reads from `cache.py`.
+After every menu action the program pauses with `Press Enter to return to menu (or 9 to exit)`
+so output is never lost before the user has had a chance to read it.
 
 ---
 
 ### `view_actions.py`
-**Option 1 - View current reservations**
-Fetches what you hold on both hotel and band in parallel, then groups them into
-confirmed pairs (same slot on both) and unmatched ones (only on one service).
-Updates the status line afterwards.
+Read-only actions — nothing here modifies a reservation.
 
-**Option 2 - View first 20 available slots**
-Always hits both servers fresh (bypasses the cache) and shows the first 20 free
-slots on each. Updates the cache as a side effect so subsequent options that use
-the cache start with fresh data.
+**Option 1 — View current reservations**
+Fetches held slots from both services in parallel, groups them into confirmed pairs
+(same slot on both services) and unmatched stragglers (only on one service),
+then updates the status line.
 
-**Option 5 - View first 5 matching slots**
-Finds slots that are free on both hotel *and* band simultaneously and shows the
-earliest five. Uses the cache if it is recent enough, to avoid unnecessary API
-calls.
+**Option 2 — View first 20 available slots**
+Always bypasses the cache and fetches live data from both servers in parallel.
+Shows the first 20 free slots on each service and updates the cache as a side effect.
 
-All three functions fetch from both services in parallel and print elapsed time.
+**Option 5 — View first 5 matching slots**
+Finds slots that are free on both hotel and band simultaneously and shows the earliest
+five. Uses the cache if it is recent enough to save API calls.
+
+All three print elapsed time so the marker can see how long each parallel fetch took.
+
+---
 
 ### `booking_actions.py`
 Everything that creates a reservation.
 
-**Option 3 - Book a specific slot (submenu)**
-Shows a secondary menu with three choices:
-- *Book hotel only* - fetches and displays available hotel slots first, then reserves the slot you enter. Reminds you that a matching band slot is still needed.
-- *Book band only* - same pattern for the band.
-- *Book matching* - fetches and displays slots free on both services first, then reserves the slot you enter on hotel and then band. If the hotel succeeds but the band fails for any reason, the hotel slot is released automatically so nothing is left dangling.
+**Option 3 — Book a specific slot (submenu)**
+Three sub-options:
+- *Book hotel only* — shows available hotel slots first, then reserves the one you enter.
+  Reminds you that a matching band slot is still needed.
+- *Book band only* — same pattern for the band.
+- *Book matching* — shows slots free on both services first, then reserves hotel then band.
+  If the hotel succeeds but the band fails, the hotel reservation is released automatically
+  so nothing is left dangling.
 
-**Option 6 - Reserve the earliest matching slot**
-The main automated strategy. Key behaviours:
-- Reads your current holdings first to find the current best confirmed pair.
-- Retries up to the configured retry limit (`retries` in `api.ini`) if no matching slots are visible right now - availability changes constantly as other clients compete.
-- Only books a new slot if it is earlier than your current best - if you already have the optimal slot it tells you and stops.
-- If it successfully books a better slot, it releases the old confirmed pair *only after* the new one is secured.
-- Automatically cleans up any remaining stray single-service reservations after a successful booking.
-- Updates the status line on success.
+Slot numbers are validated as 1–550 before any API call is made.
 
+**Option 6 — Reserve the earliest matching slot**
+The main automated booking strategy:
+- Reads current holdings to find the existing best confirmed pair.
+- Retries up to `MAX_RETRIES` times if no matching slots are visible right now —
+  availability shifts constantly as other clients compete.
+- Only books a new slot if it is earlier than the current best.
+- Releases the old confirmed pair only *after* the new one is secured — so you
+  are never left without at least one confirmed booking.
+- Auto-cleans stray single-service reservations on success.
+- Prints total elapsed time and attempt count so the marker can verify the
+  1-second rate limit is being respected.
+
+---
 
 ### `cancel_actions.py`
 Everything that removes a reservation.
 
-**Option 4 - Cancel a specific reservation**
-Shows your current holdings, asks for a slot number, then asks whether to cancel
-it on hotel, band, or both. If cancelling both, the two release calls are made
-in parallel.
+**Option 4 — Cancel a specific reservation**
+Shows current holdings, asks for a slot number, validates that you actually hold it
+(tells you clearly if you do not, without making any API call), then asks hotel/band/both.
+Asks for `[y/n]` confirmation before any destructive call. Parallel release if cancelling
+the same slot on both services.
 
-**Option 7 - Cancel all unnecessary reservations**
-Keeps only the earliest slot that is confirmed on both hotel and band, and
-releases everything else. Matched-pair releases run in parallel. This is also
-triggered automatically after a successful Option 6, but it is exposed here so
-markers can trigger it manually at any time.
+**Option 7 — Cancel all unnecessary reservations**
+Keeps only the earliest confirmed pair and releases everything else. Shows a clear
+`Will keep` / `Will drop` summary before asking for `[y/n]` confirmation.
+Matched-pair releases run in parallel. Also triggered automatically after option 6,
+but available here so markers can run it manually at any time.
 
+---
+
+### `colours.py`
+Single source of truth for all ANSI colour codes and the pre-formatted output tags
+(`TAG_LIVE`, `TAG_CACHED`, `TAG_THREADED`, `TAG_WARNING`, `TAG_RETRY`). Every file
+imports from here so the style is consistent throughout. Zero dependencies — safe
+to import first without circular import risk.
+
+---
 
 ### `clients.py`
 Loads `api.ini` and creates the two `ReservationApi` instances (`hotel` and `band`)
-that every action file imports. Also exposes `MAX_RETRIES` and `DELAY` as
-constants so the action files do not need to re-parse the config themselves.
+that every action file imports. Also exposes `MAX_RETRIES` and `DELAY` as constants.
+
+Overrides `warnings.formatwarning` so server-retry messages from `reservationapi.py`
+print as clean red `[WARNING]` tags rather than raw file paths and line numbers.
 
 Uses `inline_comment_prefixes=("##", "#")` when parsing the config so the `##`
 comments in `api.ini` are not accidentally included in the key or URL values.
 
-### `cache.py`
-Fetching available-slot lists fresh on every operation would be wasteful and would
-risk hitting the rate limit. This module stores the last-fetched list for each
-service and serves it from memory for up to 30 seconds.
+---
 
-Every fetch prints one of two tags so the source is always visible:
-- `[LIVE]` - data was fetched fresh from the server just now.
-- `[CACHED]` - data is being served from memory, along with how old it is and
-  how many seconds remain before it expires (e.g. `refreshes in 22s`).
+### `cache.py`
+Stores the last-fetched available-slot list for each service and serves it from
+memory for up to 30 seconds, avoiding unnecessary API calls.
+
+Prints `[LIVE]` (cyan) when fetching fresh data or `[CACHED]` (yellow) when serving
+from memory, always showing how many seconds remain before the cache expires.
 
 Any operation that is about to make a booking always bypasses the cache
-(`force_fresh=True`) to make sure it is working with current data.
+(`force_fresh=True`) to ensure it is working with current data.
 
-Also exposes `cache_ages()` which `booking.py` uses to build the cache hint line
-shown at the bottom of the menu.
+---
 
 ### `helpers.py`
+Utility functions shared across the action files:
 
-- `slot_ids()` - converts the raw API response format (`[{"id": "14"}, ...]`)
-  into a plain sorted list of integers.
-- `safe_release()` - cancels a slot and prints a clear success or failure message
-  rather than letting exceptions bubble up silently. Clears the cache on success.
-- `free_up_slot()` - when at the 2-reservation limit and needing to book something
-  new, this drops the highest-numbered *unmatched* slot to make room. It refuses
-  to drop a slot that forms part of a confirmed pair. Lower slot numbers are
-  earlier dates and therefore more valuable, so we always sacrifice the highest.
+- `slot_ids()` — converts raw API response format (`[{"id": "14"}, ...]`) to a
+  sorted list of integers.
+- `get_held_with_retry(api, service)` — wraps `get_slots_held()` with retry logic
+  specifically for `NotProcessedError` (404). The spec notes that requests may not
+  be processed in order — a 404 right after a reservation is a legitimate distributed
+  systems occurrence, not a bug. Retries up to `MAX_RETRIES` times with a delay,
+  printing a red `[RETRY]` tag each time.
+- `safe_release()` — cancels a slot, prints clear success or failure, clears the cache.
+  Returns `True`/`False` so callers can react to failures.
+- `free_up_slot()` — when at the 2-reservation limit, drops the highest-numbered
+  unmatched slot to make room. Refuses to drop a slot that is part of a confirmed pair.
 
+---
 
 ### `parallel.py`
-Provides a single function `run_both(fn_hotel, fn_band)` that submits both
-callables to a `ThreadPoolExecutor(max_workers=2)` and returns
-`(hotel_result, band_result)` once both finish.
+Single function `run_both(fn_hotel, fn_band)` — submits both callables to a
+`ThreadPoolExecutor(max_workers=2)` and returns `(hotel_result, band_result)`.
 
-This is safe because each thread only ever calls one service - there is never
-more than one concurrent request to the same API, which satisfies the spec's
-rate-limiting requirement.
+Safe because each thread only ever calls one service — no concurrent requests to
+the same API, satisfying the spec's rate-limiting requirement.
 
-Every place `run_both` is used prints a `[THREADED]` tag in the output so it is
-visible when parallel execution is happening. The operations that use threading are:
+Operations that use threading:
+- Fetching held slots from both services (options 1, 4, 6, 7, auto-cleanup)
+- Fetching available slots from both services (options 2, 3, 5, inside option 6)
+- Releasing the same slot on hotel and band simultaneously (options 4, 7, auto-cleanup)
 
-- Fetching held slots from both services (options 1, 4, 6, 7 and auto-cleanup)
-- Fetching available slots from both services (options 2, 3, 5 and inside option 6)
-- Releasing a matched pair (hotel + band for the same slot) simultaneously
+Without threading, each dual-service operation takes ~2 seconds minimum. With
+threading it takes ~1 second.
 
-Without threading these operations would take roughly 2 seconds each (1 second
-minimum per API call due to rate limiting). With threading they complete in
-roughly 1 second.
+---
 
 ### `status.py`
-Stores the last-known reservation state as a short human-readable string.
-`update(hotel_held, band_held)` computes a summary such as:
+Stores the last-known reservation state as a plain string, updated by any action
+that reads the current holdings. The menu reads it on every redraw with no API calls.
 
+Example states:
 - `Best confirmed booking: Slot 14 (hotel + band)`
-- `No confirmed match yet  |  Held - hotel: 14, band: 20`
+- `No confirmed match yet  |  Held — hotel: 14, band: 20`
 - `No reservations held`
 
-Any action that learns the current holdings calls `update()` before returning.
-`booking.py` calls `get()` to display this in the menu - no extra API calls.
+---
 
+### `reservationapi.py` (provided)
+Low-level HTTP wrapper. Adds the `Authorization: Bearer` header, retries on 5xx
+errors, raises typed exceptions for 4xx errors, and enforces a minimum 1-second
+delay between requests.
 
-### `reservationapi.py` 
-Handles adding the `Authorization: Bearer` header to
-every request, automatic retries on server errors (5xx), and raising the
-appropriate custom exception for each client error (4xx). Enforces a minimum
-1-second delay between requests to respect the rate limit.
+---
 
-### `exceptions.py` 
-Custom exception classes raised by `reservationapi.py`, one per HTTP error code:
+### `exceptions.py` (provided)
+Typed exceptions raised by `reservationapi.py`:
 
 | Exception | HTTP code | Meaning |
 |-----------|-----------|---------|
 | `BadRequestError` | 400 | Malformed request |
 | `InvalidTokenError` | 401 | API key missing or wrong |
-| `BadSlotError` | 403 | Slot number does not exist |
-| `NotProcessedError` | 404 | Request not yet processed |
-| `SlotUnavailableError` | 409 | Slot already taken by someone else |
+| `BadSlotError` | 403 | Slot number does not exist (valid range: 1–550) |
+| `NotProcessedError` | 404 | Request received but not yet processed |
+| `SlotUnavailableError` | 409 | Slot already taken by another client |
 | `ReservationLimitError` | 451 | Already holding the maximum of 2 reservations |
 
+---
+
 ### `api.ini`
-Contains the base URLs and API keys for the hotel and band services, plus the
-global retry count and delay.
+Base URLs and API keys for hotel and band, plus global retry count and delay.

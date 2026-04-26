@@ -72,6 +72,29 @@ MENU_ACTIONS = {
 }
 
 
+def _pause() -> None:
+    """
+    Wait for the user to press Enter before the menu redraws.
+
+    This gives the user (and the marker) time to read the output from the
+    previous action before it scrolls away. Typing '9' exits immediately
+    without going back through the menu.
+
+    Returns:
+        None.
+    """
+    print()
+    print(PINK + "─" * 55 + RESET)
+    try:
+        ans = input(WHITE + "  Press Enter to return to menu  (or 9 to exit): " + RESET).strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\nExiting.")
+        sys.exit(0)
+    if ans == "9":
+        print(PINK + "\nGoodbye. Good luck with the wedding!" + RESET)
+        sys.exit(0)
+
+
 def main():
     print(BOLD + PINK + "\n" + "=" * 55 + RESET)
     print(BOLD + PINK + "   Wedding Planner - Distributed Booking System" + RESET)
@@ -114,6 +137,7 @@ def main():
             except Exception as e:
                 print(f"\nSomething went wrong: {e}")
                 print("Returning to the menu - no changes were made on the server.")
+            _pause()
         else:
             print("  Please enter a number between 1 and 9.")
 
