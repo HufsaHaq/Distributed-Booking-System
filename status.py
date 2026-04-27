@@ -3,28 +3,30 @@
 Tracks the last-known reservation state so the menu can display a summary
 line without making any API calls on every refresh.
 
-Any action that learns the current holdings (view, book, cancel) calls
-update() at the end. The menu just calls get() to read the stored string.
+Any action that learns the current holdings calls update() at the end.
+The menu calls get() for the summary string, and get_holdings() for the
+raw lists to display the per-service breakdown.
 """
 
 _status: str = "Not checked yet - select option 1 to view your reservations."
+_hotel_held: list = []
+_band_held:  list = []
 
 
 def update(hotel_held: list, band_held: list) -> None:
     """
-    Compute a summary string from the current holdings and store it.
-
-    Call this whenever an action fetches the current slot holdings so the
-    menu always reflects the most recent known state.
+    Compute and store a status summary from the current holdings.
 
     Args:
         hotel_held: List of slot IDs currently held on the hotel service.
         band_held:  List of slot IDs currently held on the band service.
 
     Returns:
-        None. Updates the internal status string in place.
+        None.
     """
-    global _status
+    global _status, _hotel_held, _band_held
+    _hotel_held = sorted(hotel_held)
+    _band_held  = sorted(band_held)
 
     matched    = sorted(set(hotel_held) & set(band_held))
     only_hotel = [s for s in hotel_held if s not in band_held]
@@ -55,6 +57,19 @@ def get() -> str:
     Return the current status summary string.
 
     Returns:
-        A string describing the last-known reservation state.
+        A human-readable string describing the last-known reservation state.
     """
     return _status
+
+
+def get_holdings() -> tuple:
+    """
+    Return the raw last-known held slot lists for hotel and band.
+
+    Used by the menu to display per-service holdings without an API call.
+
+    Returns:
+        Tuple of (hotel_held, band_held) as sorted lists of ints.
+        Both lists are empty if update() has not been called yet.
+    """
+    return _hotel_held, _band_held

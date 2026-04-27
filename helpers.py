@@ -33,6 +33,28 @@ def slot_ids(raw_slots: list) -> list:
     return sorted(int(s["id"]) for s in raw_slots)
 
 
+def get_held(service: str, api) -> list:
+    """
+    Return held slots for a service, using the held cache where available.
+
+    Checks the in-memory held-slot cache first. Only falls back to a live
+    API fetch (get_held_with_retry) if the cache is cold or expired. This
+    means repeated reads within the cache TTL cost zero API calls.
+
+    Args:
+        service: 'hotel' or 'band'.
+        api:     The ReservationApi instance for that service.
+
+    Returns:
+        Sorted list of held slot IDs as integers.
+    """
+    from cache import get_held_cached
+    cached = get_held_cached(service)
+    if cached is not None:
+        return cached
+    return get_held_with_retry(api, service)
+
+
 def get_held_with_retry(api: reservationapi.ReservationApi, service: str) -> list:
     """
     Fetch currently held slots, retrying on 404 (NotProcessedError).
@@ -60,7 +82,7 @@ def get_held_with_retry(api: reservationapi.ReservationApi, service: str) -> lis
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             slots = slot_ids(api.get_slots_held())
-            update_held_cache(service, slots)   # keep held cache in sync
+            update_held_cache(service, slots)
             return slots
         except NotProcessedError:
             if attempt < MAX_RETRIES:
@@ -91,8 +113,8 @@ def safe_release(api: reservationapi.ReservationApi, service: str, slot_id: int)
     """
     try:
         api.release_slot(slot_id)
-        clear_service_cache(service)      # slot is no longer available elsewhere
-        invalidate_held_cache(service)    # held list changed - force fresh read
+        clear_service_cache(service)
+        invalidate_held_cache(service)
         print(f"  {service.title()} slot {slot_id} cancelled successfully.")
         return True
     except Exception:
@@ -128,7 +150,7 @@ def free_up_slot(api: reservationapi.ReservationApi,
               "losing a confirmed booking.")
         return False
 
-    to_drop = max(unmatched)  # drop the worst (highest) unmatched slot
+    to_drop = max(unmatched)
     print(f"  {service.title()} is at the reservation limit. "
           f"Releasing unmatched {service} slot {to_drop} to make room...")
     try:

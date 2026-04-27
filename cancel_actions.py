@@ -10,7 +10,7 @@ so cannot accidentally lose a confirmed booking.
 """
 
 from clients  import hotel, band
-from helpers  import get_held_with_retry, safe_release
+from helpers  import get_held, get_held_with_retry, safe_release
 from parallel import run_both
 from colours  import TAG_THREADED, PINK, YELLOW, CYAN, RESET, BOLD
 import status
@@ -51,8 +51,8 @@ def cancel_booking() -> None:
     try:
         print(f"  {TAG_THREADED} Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
-            lambda: get_held_with_retry(hotel, "hotel"),
-            lambda: get_held_with_retry(band,  "band"),
+            lambda: get_held("hotel", hotel),
+            lambda: get_held("band",  band),
         )
     except Exception as e:
         print("  Could not retrieve your reservations - the server may be temporarily unavailable. Please try again.")
@@ -146,8 +146,8 @@ def cancel_unneeded() -> None:
     try:
         print(f"  {TAG_THREADED} Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
-            lambda: get_held_with_retry(hotel, "hotel"),
-            lambda: get_held_with_retry(band,  "band"),
+            lambda: get_held("hotel", hotel),
+            lambda: get_held("band",  band),
         )
     except Exception as e:
         print("  Could not retrieve your reservations - the server may be temporarily unavailable. Please try again.")

@@ -25,6 +25,9 @@ RESET = "\033[0m"
 BOLD  = "\033[1m"
 
 
+YELLOW = "\033[33m"
+
+
 def _cache_hint() -> str:
     """One-line cache status shown at the bottom of the menu."""
     ages = cache_ages()
@@ -40,11 +43,56 @@ def _cache_hint() -> str:
     return CYAN + "  Cache - " + " | ".join(parts) + RESET
 
 
+def _holdings_display() -> str:
+    """
+    Build a two-line holdings summary from the last-known state in status.py.
+
+    Reads from the stored lists - zero API calls. Returns an empty string
+    if update() has not been called yet (startup before first check).
+
+    Returns:
+        A formatted string showing hotel and band slots, or '' if unknown.
+    """
+    hotel_held, band_held = status.get_holdings()
+    if not hotel_held and not band_held:
+        return ""
+
+    def fmt(slots):
+        return ", ".join(f"Slot {s}" for s in slots) if slots else "none"
+
+    matched    = sorted(set(hotel_held) & set(band_held))
+    only_hotel = [s for s in hotel_held if s not in band_held]
+    only_band  = [s for s in band_held  if s not in hotel_held]
+
+    hotel_str = fmt(hotel_held)
+    band_str  = fmt(band_held)
+
+    lines = []
+    lines.append(
+        f"  {CYAN}{BOLD}Hotel{RESET} ({len(hotel_held)}/2): {WHITE}{hotel_str}{RESET}  "
+        f"{YELLOW}{BOLD}Band{RESET} ({len(band_held)}/2): {WHITE}{band_str}{RESET}"
+    )
+    if matched:
+        lines.append(f"  {GREEN}{BOLD}Confirmed match:{RESET} {WHITE}Slot(s) {fmt(matched)}{RESET}")
+    if only_hotel:
+        lines.append(f"  {CYAN}Hotel only (unmatched):{RESET} {fmt(only_hotel)}")
+    if only_band:
+        lines.append(f"  {YELLOW}Band only  (unmatched):{RESET} {fmt(only_band)}")
+    return "\n".join(lines)
+
+
 def show_menu():
-    print()
+    os.system("clear")
     print(PINK + "=" * 55 + RESET)
     print(BOLD + PINK + "          Wedding Planner - Booking Menu" + RESET)
     print(PINK + "=" * 55 + RESET)
+
+    # Holdings block - permanent, reads from status (no API call)
+    holdings = _holdings_display()
+    if holdings:
+        print(holdings)
+        print(PINK + "-" * 55 + RESET)
+
     print(f"  {BOLD}Status:{RESET} {WHITE}{status.get()}{RESET}")
     print(PINK + "-" * 55 + RESET)
     print(GREEN + "  1." + WHITE + "  View your current reservations"          + RESET)
@@ -53,7 +101,7 @@ def show_menu():
     print(GREEN + "  4." + WHITE + "  Cancel a reservation"                     + RESET)
     print(GREEN + "  5." + WHITE + "  View first 5 slots free on both services" + RESET)
     print(GREEN + "  6." + WHITE + "  Reserve the earliest matching slot"       + RESET)
-    print(GREEN + "  7." + WHITE + "  Cancel any unneeded reservations"      + RESET)
+    print(GREEN + "  7." + WHITE + "  Cancel any unneeded reservations"         + RESET)
     print(PINK + "-" * 55 + RESET)
     print(GREEN + "  8." + WHITE + "  Clear screen"                             + RESET)
     print(GREEN + "  9." + WHITE + "  Exit"                                     + RESET)
@@ -135,8 +183,7 @@ def main():
             sys.exit(0)
 
         if choice == "8":
-            os.system("clear")
-            continue
+            continue   # show_menu() at top of loop already clears
 
         action = MENU_ACTIONS.get(choice)
         if action:

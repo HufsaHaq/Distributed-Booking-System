@@ -16,7 +16,7 @@ from exceptions import (
 from clients  import hotel, band, MAX_RETRIES, DELAY
 from cache    import (get_available, clear_cache, clear_service_cache,
                       invalidate_held_cache, update_held_cache)
-from helpers  import slot_ids, safe_release, free_up_slot, get_held_with_retry
+from helpers  import slot_ids, safe_release, free_up_slot, get_held_with_retry, get_held
 from parallel import run_both
 from colours  import TAG_THREADED
 import status
@@ -69,26 +69,6 @@ def _prompt_slot_number():
         print(f"  Slot {slot} is out of range. Valid slots are 1 to 550.")
         return None
     return slot
-
-
-def _get_held(service: str, api) -> list:
-    """
-    Return held slots for a service, using the held cache where available.
-
-    Falls back to a live fetch via get_held_with_retry if the cache is cold.
-
-    Args:
-        service: 'hotel' or 'band'.
-        api:     The ReservationApi instance for that service.
-
-    Returns:
-        Sorted list of held slot IDs as integers.
-    """
-    from cache import get_held_cached
-    cached = get_held_cached(service)
-    if cached is not None:
-        return cached
-    return get_held_with_retry(api, service)
 
 
 def _ask_drop_slot(service: str, held: list) -> int | None:
@@ -148,7 +128,7 @@ def _book_hotel_only() -> None:
 
     # Check holdings before prompting so we handle the limit gracefully
     try:
-        hotel_held = _get_held("hotel", hotel)
+        hotel_held = get_held("hotel", hotel)
     except Exception:
         hotel_held = []
 
@@ -213,7 +193,7 @@ def _book_band_only() -> None:
         print("\n  Could not fetch band availability - the server may be temporarily unavailable.")
 
     try:
-        band_held = _get_held("band", band)
+        band_held = get_held("band", band)
     except Exception:
         band_held = []
 
@@ -301,8 +281,8 @@ def _book_matching() -> None:
     try:
         print(f"  {TAG_THREADED} Checking your current reservations...")
         hotel_held, band_held = run_both(
-            lambda: _get_held("hotel", hotel),
-            lambda: _get_held("band",  band),
+            lambda: get_held("hotel", hotel),
+            lambda: get_held("band",  band),
         )
     except Exception:
         hotel_held, band_held = [], []
@@ -347,7 +327,7 @@ def _book_matching() -> None:
     band_drop  = None
 
     if len(hotel_held) >= 2 or len(band_held) >= 2:
-        # If the new slot is strictly earlier than current best, auto-drop
+
         if current_best is not None and slot_id < current_best:
             # New slot is a better (earlier) date - auto-drop everything else.
             print(f"\n  Slot {slot_id} is earlier than your current best booking "
@@ -361,8 +341,8 @@ def _book_matching() -> None:
                 if s != slot_id:
                     print(f"    Releasing band slot {s} (upgrading from {s} to {slot_id})...")
                     safe_release(band, "band", s)
-            hotel_held = _get_held("hotel", hotel)
-            band_held  = _get_held("band",  band)
+            hotel_held = get_held("hotel", hotel)
+            band_held  = get_held("band",  band)
 
         else:
             # New slot is not an improvement - ask which ones to drop.
@@ -658,3 +638,4 @@ def _auto_cancel_unneeded(confirmed_slot: int):
             safe_release(hotel, "hotel", slot)
         else:
             safe_release(band, "band", slot)
+            

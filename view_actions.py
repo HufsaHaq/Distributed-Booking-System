@@ -10,7 +10,7 @@ import time
 
 from clients  import hotel, band
 from cache    import get_available
-from helpers  import get_held_with_retry
+from helpers  import get_held, get_held_with_retry
 from parallel import run_both
 from colours  import TAG_THREADED, CYAN, YELLOW, BOLD, RESET
 import status
@@ -34,8 +34,8 @@ def view_current_bookings() -> None:
     try:
         print(f"  {TAG_THREADED} Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
-            lambda: get_held_with_retry(hotel, "hotel"),
-            lambda: get_held_with_retry(band,  "band"),
+            lambda: get_held("hotel", hotel),
+            lambda: get_held("band",  band),
         )
     except Exception as e:
         print("  Could not retrieve your reservations - the server may be temporarily unavailable. Please try again.")
