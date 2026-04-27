@@ -12,7 +12,7 @@ from clients  import hotel, band
 from cache    import get_available
 from helpers  import get_held_with_retry
 from parallel import run_both
-from colours  import TAG_THREADED
+from colours  import TAG_THREADED, CYAN, YELLOW, BOLD, RESET
 import status
 
 
@@ -51,8 +51,8 @@ def view_current_bookings() -> None:
     def fmt(slots):
         return ", ".join(f"Slot {s}" for s in slots) if slots else "none"
 
-    print(f"\n  Hotel ({len(hotel_held)}/2 slots held): {fmt(hotel_held)}")
-    print(f"  Band  ({len(band_held)}/2 slots held): {fmt(band_held)}")
+    print(f"\n  {CYAN}{BOLD}Hotel{RESET} ({len(hotel_held)}/2 slots held): {fmt(hotel_held)}")
+    print(f"  {YELLOW}{BOLD}Band {RESET} ({len(band_held)}/2 slots held): {fmt(band_held)}")
 
     matched    = sorted(set(hotel_held) & set(band_held))
     only_hotel = [s for s in hotel_held if s not in band_held]

@@ -12,7 +12,7 @@ so cannot accidentally lose a confirmed booking.
 from clients  import hotel, band
 from helpers  import get_held_with_retry, safe_release
 from parallel import run_both
-from colours  import TAG_THREADED, PINK, YELLOW, RESET, BOLD
+from colours  import TAG_THREADED, PINK, YELLOW, CYAN, RESET, BOLD
 import status
 
 
@@ -65,8 +65,8 @@ def cancel_booking() -> None:
     def fmt(slots):
         return ", ".join(f"Slot {s}" for s in slots) if slots else "none"
 
-    print(f"\n  Hotel slots held: {fmt(hotel_held)}")
-    print(f"  Band  slots held: {fmt(band_held)}")
+    print(f"\n  {CYAN}{BOLD}Hotel{RESET} slots held: {fmt(hotel_held)}")
+    print(f"  {YELLOW}{BOLD}Band {RESET} slots held: {fmt(band_held)}")
 
     raw = input("\nEnter the slot number to cancel (or press Enter to go back): ").strip()
     if not raw:
