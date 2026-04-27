@@ -158,6 +158,15 @@ MENU_ACTIONS = {
     "7": cancel_unneeded,
 }
 
+MENU_TITLES = {
+    "1": "View your current reservations",
+    "2": "View first 20 available slots",
+    "3": "Book a specific slot",
+    "4": "Cancel a reservation",
+    "5": "View first 5 slots free on both services",
+    "6": "Reserve the earliest matching slot",
+    "7": "Cancel any unneeded reservations",
+}
 
 # ── Startup ────────────────────────────────────────────────────────────────────
 
@@ -223,6 +232,7 @@ def main():
         action = MENU_ACTIONS.get(choice)
         if action:
             os.system("clear")
+            print(PINK + MENU_TITLES[choice] + RESET)
             try:
                 action()
             except KeyboardInterrupt:
