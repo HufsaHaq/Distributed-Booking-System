@@ -100,10 +100,19 @@ def view_available_slots() -> None:
     def fmt20(slots):
         return ", ".join(str(s) for s in slots[:20]) if slots else "none available"
 
-    print(f"\n  First 20 available hotel slots: {fmt20(hotel_slots)}")
-    print(f"  First 20 available band slots:  {fmt20(band_slots)}")
-    print(f"\n  Hotel: {len(hotel_slots)} free in total | "
-          f"Band: {len(band_slots)} free in total  ({elapsed:.1f}s)")
+    print(f"\n  {CYAN}{BOLD}Hotel{RESET} - first 20 available: {fmt20(hotel_slots)}")
+    print(f"  {YELLOW}{BOLD}Band {RESET} - first 20 available: {fmt20(band_slots)}")
+
+    matching = sorted(set(hotel_slots) & set(band_slots))
+    if matching:
+        fmt20m = ", ".join(str(s) for s in matching[:20])
+        print(f"\n  First 20 slots free on {CYAN}hotel{RESET} AND {YELLOW}band{RESET}: {fmt20m}")
+    else:
+        print("\n  No slots are currently free on both services simultaneously.")
+
+    print(f"\n  Hotel: {len(hotel_slots)} free | "
+          f"Band: {len(band_slots)} free | "
+          f"Matching: {len(matching)}  ({elapsed:.1f}s)")
 
 
 def view_matching_slots() -> None:
