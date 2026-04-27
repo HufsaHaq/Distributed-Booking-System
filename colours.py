@@ -16,7 +16,7 @@ WHITE  = "\033[37m"
 BOLD   = "\033[1m"
 RESET  = "\033[0m"
 
-TAG_LIVE     = CYAN   + "[LIVE]    " + RESET  # fresh server fetch
+TAG_LIVE     = CYAN   + "[LIVE API]    " + RESET  # fresh server fetch
 TAG_CACHED   = YELLOW + "[CACHED]  " + RESET  # served from in-memory cache
 TAG_THREADED = GREEN  + "[THREADED]" + RESET  # parallel hotel + band call
 TAG_WARNING  = RED    + "[WARNING] " + RESET  # server error / retry

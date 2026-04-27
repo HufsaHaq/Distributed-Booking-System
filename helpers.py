@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-
 Utility functions shared across the application.
 
 These deal with the mechanics of slot management (parsing API responses,
@@ -11,7 +10,8 @@ user-facing logic.
 
 import time
 import reservationapi
-from cache      import clear_cache, clear_service_cache
+from cache      import (clear_service_cache, update_held_cache,
+                        invalidate_held_cache)
 from exceptions import NotProcessedError
 
 
@@ -39,14 +39,13 @@ def get_held_with_retry(api: reservationapi.ReservationApi, service: str) -> lis
 
     The spec notes that requests may not be processed in the order they are
     received. A 404 on get_slots_held() can legitimately occur right after
-    a reservation is made if the server has not yet processed it. Rather than
-    propagating that error, we retry with exponential backoff up to MAX_RETRIES
-    times - doubling the wait on each attempt to reduce server load.
+    a reservation is made if the server has not yet processed it. Retries
+    with exponential backoff up to MAX_RETRIES times. Saves the result to
+    the held-slot cache on success.
 
     Args:
         api:     The ReservationApi instance to query.
-        service: Display name of the service ('hotel' or 'band'), used for
-                 messages only.
+        service: Display name of the service ('hotel' or 'band').
 
     Returns:
         Sorted list of held slot IDs as integers.
@@ -60,11 +59,11 @@ def get_held_with_retry(api: reservationapi.ReservationApi, service: str) -> lis
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            return slot_ids(api.get_slots_held())
+            slots = slot_ids(api.get_slots_held())
+            update_held_cache(service, slots)   # keep held cache in sync
+            return slots
         except NotProcessedError:
             if attempt < MAX_RETRIES:
-                # Exponential backoff: the server may still be processing a
-                # recent reservation - wait progressively longer before retrying.
                 wait = DELAY * (2 ** (attempt - 1))
                 print(f"  {TAG_RETRY} The {service} server has not finished "
                       f"processing the last request. "
@@ -79,9 +78,8 @@ def safe_release(api: reservationapi.ReservationApi, service: str, slot_id: int)
     """
     Cancel a slot and report the outcome clearly.
 
-    Prints success or failure rather than letting exceptions bubble up silently.
-    Clears the availability cache on success so the next fetch reflects the
-    released slot.
+    Clears the available-slot cache and invalidates the held-slot cache for
+    the affected service on success so the next fetch reflects the change.
 
     Args:
         api:     The ReservationApi instance to call (hotel or band).
@@ -93,11 +91,13 @@ def safe_release(api: reservationapi.ReservationApi, service: str, slot_id: int)
     """
     try:
         api.release_slot(slot_id)
-        clear_service_cache(service)
+        clear_service_cache(service)      # slot is no longer available elsewhere
+        invalidate_held_cache(service)    # held list changed - force fresh read
         print(f"  {service.title()} slot {slot_id} cancelled successfully.")
         return True
-    except Exception as e:
-        print(f"  Could not cancel {service} slot {slot_id} - the server may be temporarily unavailable.")
+    except Exception:
+        print(f"  Could not cancel {service} slot {slot_id} - "
+              "the server may be temporarily unavailable.")
         return False
 
 
@@ -134,8 +134,10 @@ def free_up_slot(api: reservationapi.ReservationApi,
     try:
         api.release_slot(to_drop)
         clear_service_cache(service)
+        invalidate_held_cache(service)
         print(f"  {service.title()} slot {to_drop} released.")
         return True
-    except Exception as e:
-        print(f"  Could not release {service} slot {to_drop} - the server may be temporarily unavailable.")
+    except Exception:
+        print(f"  Could not release {service} slot {to_drop} - "
+              "the server may be temporarily unavailable.")
         return False

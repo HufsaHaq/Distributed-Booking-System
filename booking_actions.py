@@ -14,7 +14,8 @@ from exceptions import (
 )
 
 from clients  import hotel, band, MAX_RETRIES, DELAY
-from cache    import get_available, clear_cache, clear_service_cache
+from cache    import (get_available, clear_cache, clear_service_cache,
+                      invalidate_held_cache, update_held_cache)
 from helpers  import slot_ids, safe_release, free_up_slot, get_held_with_retry
 from parallel import run_both
 from colours  import TAG_THREADED
@@ -70,8 +71,69 @@ def _prompt_slot_number():
     return slot
 
 
-def _book_hotel_only():
-    """Reserve a single slot on the hotel only."""
+def _get_held(service: str, api) -> list:
+    """
+    Return held slots for a service, using the held cache where available.
+
+    Falls back to a live fetch via get_held_with_retry if the cache is cold.
+
+    Args:
+        service: 'hotel' or 'band'.
+        api:     The ReservationApi instance for that service.
+
+    Returns:
+        Sorted list of held slot IDs as integers.
+    """
+    from cache import get_held_cached
+    cached = get_held_cached(service)
+    if cached is not None:
+        return cached
+    return get_held_with_retry(api, service)
+
+
+def _ask_drop_slot(service: str, held: list) -> int | None:
+    """
+    Show the user their current holdings on one service and ask which to drop.
+
+    Args:
+        service: 'hotel' or 'band', used for display.
+        held:    Slots currently held on that service.
+
+    Returns:
+        The slot ID to release, or None if the user cancelled.
+    """
+    def fmt(slots):
+        return ", ".join(f"Slot {s}" for s in slots)
+
+    print(f"\n  You currently hold 2 {service} reservations: {fmt(held)}")
+    print(f"  To book a new {service} slot you must release one of the above first.")
+    raw = input(f"  Enter the {service} slot to release (or press Enter to cancel): ").strip()
+    if not raw:
+        print("  Cancelled.")
+        return None
+    try:
+        to_drop = int(raw)
+    except ValueError:
+        print(f"  '{raw}' is not a valid slot number.")
+        return None
+    if to_drop not in held:
+        print(f"  You do not hold {service} slot {to_drop}. "
+              f"Your {service} slots: {fmt(held)}")
+        return None
+    return to_drop
+
+
+def _book_hotel_only() -> None:
+    """
+    Reserve a single slot on the hotel only.
+
+    If already at the 2-slot hotel limit, shows current holdings and asks
+    which one to drop before proceeding.
+
+    Returns:
+        None. Prints results directly to stdout.
+    """
+    from cache import invalidate_held_cache
     print("\nBook hotel only")
 
     try:
@@ -81,32 +143,63 @@ def _book_hotel_only():
             print(f"\n  Available hotel slots (first 20): {preview}")
         else:
             print("\n  No hotel slots are currently available.")
-    except Exception as e:
+    except Exception:
         print("\n  Could not fetch hotel availability - the server may be temporarily unavailable.")
+
+    # Check holdings before prompting so we handle the limit gracefully
+    try:
+        hotel_held = _get_held("hotel", hotel)
+    except Exception:
+        hotel_held = []
+
+    # If at the limit, ask which to drop before we even ask what to book
+    slot_to_drop = None
+    if len(hotel_held) >= 2:
+        slot_to_drop = _ask_drop_slot("hotel", hotel_held)
+        if slot_to_drop is None:
+            return
 
     slot_id = _prompt_slot_number()
     if slot_id is None:
         return
 
+    # Release the chosen slot first if needed
+    if slot_to_drop is not None:
+        print(f"\n  Releasing hotel slot {slot_to_drop} to make room...")
+        if not safe_release(hotel, "hotel", slot_to_drop):
+            print("  Could not release the slot - cancelling.")
+            return
+
     print(f"\n  Reserving hotel slot {slot_id}...")
     try:
         hotel.reserve_slot(slot_id)
         clear_service_cache("hotel")
+        invalidate_held_cache("hotel")
         print(f"  Hotel slot {slot_id} reserved.")
         print("  Note: you still need a matching band slot to confirm the wedding.")
     except SlotUnavailableError:
         print(f"  Slot {slot_id} is already taken on the hotel.")
     except ReservationLimitError:
-        print("  You already hold 2 hotel reservations. "
-              "Cancel one with option 4 before booking another.")
+        print("  The hotel is still showing the reservation limit - "
+              "the server may not have processed the release yet. Try again shortly.")
     except BadSlotError:
         print(f"  Slot {slot_id} does not exist (valid range: 1–550).")
-    except Exception as e:
-        print("  The hotel reservation did not go through - the server may be temporarily unavailable. Please try again.")
+    except Exception:
+        print("  The hotel reservation did not go through - "
+              "the server may be temporarily unavailable. Please try again.")
 
 
-def _book_band_only():
-    """Reserve a single slot on the band only."""
+def _book_band_only() -> None:
+    """
+    Reserve a single slot on the band only.
+
+    If already at the 2-slot band limit, shows current holdings and asks
+    which one to drop before proceeding.
+
+    Returns:
+        None. Prints results directly to stdout.
+    """
+    from cache import invalidate_held_cache
     print("\nBook band only")
 
     try:
@@ -116,83 +209,183 @@ def _book_band_only():
             print(f"\n  Available band slots (first 20): {preview}")
         else:
             print("\n  No band slots are currently available.")
-    except Exception as e:
+    except Exception:
         print("\n  Could not fetch band availability - the server may be temporarily unavailable.")
+
+    try:
+        band_held = _get_held("band", band)
+    except Exception:
+        band_held = []
+
+    slot_to_drop = None
+    if len(band_held) >= 2:
+        slot_to_drop = _ask_drop_slot("band", band_held)
+        if slot_to_drop is None:
+            return
 
     slot_id = _prompt_slot_number()
     if slot_id is None:
         return
+
+    if slot_to_drop is not None:
+        print(f"\n  Releasing band slot {slot_to_drop} to make room...")
+        if not safe_release(band, "band", slot_to_drop):
+            print("  Could not release the slot - cancelling.")
+            return
 
     print(f"\n  Reserving band slot {slot_id}...")
     try:
         band.reserve_slot(slot_id)
         clear_service_cache("band")
+        invalidate_held_cache("band")
         print(f"  Band slot {slot_id} reserved.")
         print("  Note: you still need a matching hotel slot to confirm the wedding.")
     except SlotUnavailableError:
         print(f"  Slot {slot_id} is already taken on the band.")
     except ReservationLimitError:
-        print("  You already hold 2 band reservations. "
-              "Cancel one with option 4 before booking another.")
+        print("  The band is still showing the reservation limit - "
+              "the server may not have processed the release yet. Try again shortly.")
     except BadSlotError:
         print(f"  Slot {slot_id} does not exist (valid range: 1–550).")
-    except Exception as e:
-        print("  The band reservation did not go through - the server may be temporarily unavailable. Please try again.")
+    except Exception:
+        print("  The band reservation did not go through - "
+              "the server may be temporarily unavailable. Please try again.")
 
 
-def _book_matching():
+def _book_matching() -> None:
     """
     Reserve the same slot on both hotel and band.
 
-    Books hotel first. If the hotel succeeds but the band then fails for any
-    reason, the hotel reservation is released automatically so nothing is
-    left single.
+    Reservation-limit handling:
+    - If the new slot is earlier than the current best confirmed pair,
+      automatically releases everything else and books the better slot.
+    - If the new slot is not an improvement, asks the user which slot to
+      drop on each service before proceeding.
+
+    Books hotel first. If the hotel succeeds but the band then fails,
+    the hotel reservation is released automatically.
+
+    Returns:
+        None. Prints results directly to stdout.
     """
+    from cache import invalidate_held_cache
     print("\nBook matching slot (hotel + band)")
 
+    # Fetch available slots and show matching ones
     try:
-        hotel_slots = get_available(hotel, "hotel", force_fresh=True)
-        band_slots  = get_available(band,  "band",  force_fresh=True)
-        matching    = sorted(set(hotel_slots) & set(band_slots))
+        print(f"  {TAG_THREADED} Fetching availability from hotel and band simultaneously...")
+        hotel_slots, band_slots = run_both(
+            lambda: get_available(hotel, "hotel", force_fresh=True),
+            lambda: get_available(band,  "band",  force_fresh=True),
+        )
+        matching = sorted(set(hotel_slots) & set(band_slots))
         if matching:
             preview = ", ".join(str(s) for s in matching[:20])
             print(f"\n  Slots free on both hotel and band (first 20): {preview}")
         else:
             print("\n  No slots are currently free on both services simultaneously.")
-    except Exception as e:
+    except Exception:
         print("\n  Could not fetch availability - the server may be temporarily unavailable.")
+
+    # Read current holdings (from cache if warm, otherwise live)
+    try:
+        print(f"  {TAG_THREADED} Checking your current reservations...")
+        hotel_held, band_held = run_both(
+            lambda: _get_held("hotel", hotel),
+            lambda: _get_held("band",  band),
+        )
+    except Exception:
+        hotel_held, band_held = [], []
+
+    matched     = sorted(set(hotel_held) & set(band_held))
+    current_best = matched[0] if matched else None
+
+    if current_best:
+        print(f"\n  Your current best confirmed booking: Slot {current_best}")
 
     slot_id = _prompt_slot_number()
     if slot_id is None:
         return
 
-    # --- Hotel ---
+    # ──  limit handling ──────────────────────────────────────────────────
+
+    hotel_drop = None
+    band_drop  = None
+
+    if len(hotel_held) >= 2 or len(band_held) >= 2:
+        # If the new slot is strictly earlier than current best, auto-drop
+        if current_best is not None and slot_id < current_best:
+            print(f"\n  Slot {slot_id} is earlier than your current best (slot {current_best}).")
+            print("  Automatically releasing all current reservations to secure the better slot...")
+            for s in hotel_held:
+                if s != slot_id:
+                    safe_release(hotel, "hotel", s)
+            for s in band_held:
+                if s != slot_id:
+                    safe_release(band, "band", s)
+            # Refresh holdings after releases
+            hotel_held = _get_held("hotel", hotel)
+            band_held  = _get_held("band",  band)
+        else:
+            # New slot is not better - ask which slots to drop
+            def fmt(slots):
+                return ", ".join(f"Slot {s}" for s in slots)
+
+            if len(hotel_held) >= 2:
+                hotel_drop = _ask_drop_slot("hotel", hotel_held)
+                if hotel_drop is None:
+                    return
+            if len(band_held) >= 2:
+                band_drop = _ask_drop_slot("band", band_held)
+                if band_drop is None:
+                    return
+
+    # ── Release chosen slots ──────────────────────────────────────────────────
+
+    if hotel_drop is not None:
+        print(f"\n  Releasing hotel slot {hotel_drop} to make room...")
+        if not safe_release(hotel, "hotel", hotel_drop):
+            print("  Could not release the slot - cancelling.")
+            return
+
+    if band_drop is not None:
+        print(f"\n  Releasing band slot {band_drop} to make room...")
+        if not safe_release(band, "band", band_drop):
+            print("  Could not release the slot - cancelling.")
+            return
+
+    # ── Book hotel ────────────────────────────────────────────────────────────
+
     print(f"\n  Reserving hotel slot {slot_id}...")
     hotel_booked = False
     try:
         hotel.reserve_slot(slot_id)
         hotel_booked = True
         clear_service_cache("hotel")
+        invalidate_held_cache("hotel")
         print(f"  Hotel slot {slot_id} reserved.")
     except SlotUnavailableError:
         print(f"  Slot {slot_id} is already taken on the hotel. "
               "Use option 5 to find a slot free on both services.")
     except ReservationLimitError:
-        print("  You already hold 2 hotel reservations. "
-              "Cancel one with option 4 before booking another.")
+        print("  The hotel is still showing the reservation limit - "
+              "the server may not have processed the release yet. Try again shortly.")
     except BadSlotError:
         print(f"  Slot {slot_id} does not exist (valid range: 1–550).")
-    except Exception as e:
-        print("  The hotel reservation did not go through - the server may be temporarily unavailable.")
+    except Exception:
+        print("  The hotel reservation did not go through - "
+              "the server may be temporarily unavailable.")
 
     if not hotel_booked:
         return
 
-    # Band (only if hotel succeeded) 
+    # ── Book band ─────────────────────────────────────────────────────────────
+
     print(f"  Reserving band slot {slot_id}...")
     try:
         band.reserve_slot(slot_id)
         clear_service_cache("band")
+        invalidate_held_cache("band")
         print(f"  Band slot {slot_id} reserved.")
         print(f"\n  Slot {slot_id} is now confirmed on both hotel and band.")
     except SlotUnavailableError:
@@ -200,15 +393,17 @@ def _book_matching():
         print(f"  Releasing hotel slot {slot_id} to keep reservations tidy...")
         safe_release(hotel, "hotel", slot_id)
     except ReservationLimitError:
-        print("  You already hold 2 band reservations. "
-              f"Hotel slot {slot_id} was reserved but the band was not - "
-              "cancel a band reservation and try again.")
+        print("  The band is still showing the reservation limit - "
+              "the server may not have processed the release yet.")
+        print(f"  Hotel slot {slot_id} was reserved but the band was not. "
+              "Use option 7 to clean up then try again.")
     except BadSlotError:
-        print(f"  Slot {slot_id} does not exist on the band side.")
+        print(f"  Slot {slot_id} does not exist (valid range: 1–550).")
         print(f"  Releasing hotel slot {slot_id}...")
         safe_release(hotel, "hotel", slot_id)
-    except Exception as e:
-        print("  The band reservation did not go through - the server may be temporarily unavailable.")
+    except Exception:
+        print("  The band reservation did not go through - "
+              "the server may be temporarily unavailable.")
         print(f"  Releasing hotel slot {slot_id} to avoid a dangling reservation...")
         safe_release(hotel, "hotel", slot_id)
 
@@ -311,6 +506,7 @@ def reserve_earliest_match():
             hotel.reserve_slot(target)
             hotel_booked = True
             clear_service_cache("hotel")
+            invalidate_held_cache("hotel")
             print(f"  Hotel slot {target} reserved.")
         except SlotUnavailableError:
             wait = DELAY * (2 ** (attempt - 1))
@@ -341,6 +537,7 @@ def reserve_earliest_match():
         try:
             band.reserve_slot(target)
             clear_service_cache("band")
+            invalidate_held_cache("band")
             print(f"  Band slot {target} reserved.")
         except SlotUnavailableError:
             wait = DELAY * (2 ** (attempt - 1))

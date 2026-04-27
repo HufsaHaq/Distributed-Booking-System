@@ -2,27 +2,39 @@
 """
 cache
 ~~~~~
-In-memory cache for available-slot lists.
+In-memory cache for available-slot lists and held-slot lists.
 
-Available slot data changes constantly as other clients compete for bookings,
-but fetching it on every single operation would be wasteful and risks hitting
-the rate limit. This module caches the last-known list for up to 30 seconds,
-and always tells the user clearly whether they are seeing live or cached data.
+Available slots change constantly as other clients compete - cached for
+30 seconds to reduce API load. Held slots only change when we make a
+booking or cancellation - cached for 60 seconds and invalidated
+immediately on any operation that changes holdings.
+
+Every fetch and cache hit prints a clear tag so the marker can always
+see exactly where data is coming from.
 """
 
 import time
 import reservationapi
 from colours import TAG_LIVE, TAG_CACHED
 
-CACHE_MAX_AGE_SECONDS = 30
+CACHE_MAX_AGE_SECONDS  = 30   # available slots TTL
+HELD_CACHE_AGE_SECONDS = 60   # held slots TTL - longer, we control when they change
 
-# Keyed by service name ('hotel' or 'band'). Each entry is either None or
-# a dict with 'slots' (sorted int list) and 'fetched_at' (float timestamp).
+# Available-slot cache: keyed by 'hotel' or 'band'.
+# Each entry: {'slots': [int, ...], 'fetched_at': float} or None.
 _cache: dict = {
     "hotel": None,
     "band":  None,
 }
 
+# Held-slot cache: same structure.
+_held_cache: dict = {
+    "hotel": None,
+    "band":  None,
+}
+
+
+# ── Available slots ────────────────────────────────────────────────────────────
 
 def get_available(api: reservationapi.ReservationApi,
                   service: str,
@@ -63,18 +75,17 @@ def get_available(api: reservationapi.ReservationApi,
 
 
 def clear_cache() -> None:
-    """Discard both cached slot lists so the next fetch goes to the server."""
+    """Discard both available-slot caches so the next fetch goes to the server."""
     _cache["hotel"] = None
     _cache["band"]  = None
 
 
 def clear_service_cache(service: str) -> None:
     """
-    Discard the cached slot list for a single service only.
+    Discard the available-slot cache for one service only.
 
-    Use this after a booking or cancellation on one service so the other
-    service's cache remains valid - the other service's availability did
-    not change as a result of our action.
+    Use this after a booking or cancellation so the other service's
+    cache stays valid - only the affected service's availability changed.
 
     Args:
         service: 'hotel' or 'band'.
@@ -84,7 +95,7 @@ def clear_service_cache(service: str) -> None:
 
 def cache_ages() -> dict:
     """
-    Return the age in seconds of each cached entry, or None if not cached.
+    Return the age in seconds of each available-slot cache entry, or None.
 
     Returns:
         Dict mapping service name to age in seconds (int), or None if that
@@ -95,3 +106,59 @@ def cache_ages() -> dict:
         service: int(now - entry["fetched_at"]) if entry else None
         for service, entry in _cache.items()
     }
+
+
+# ── Held slots ─────────────────────────────────────────────────────────────────
+
+def get_held_cached(service: str) -> list | None:
+    """
+    Return the cached list of held slot IDs for the given service, or None
+    if the cache is empty or has expired.
+
+    Callers should fall back to a live API fetch (get_held_with_retry) if
+    this returns None.
+
+    Args:
+        service: 'hotel' or 'band'.
+
+    Returns:
+        Sorted list of held slot IDs as integers, or None if not cached.
+    """
+    entry = _held_cache[service]
+    if entry is None:
+        return None
+    age = time.time() - entry["fetched_at"]
+    if age >= HELD_CACHE_AGE_SECONDS:
+        _held_cache[service] = None
+        return None
+    remaining = int(HELD_CACHE_AGE_SECONDS - age)
+    print(f"  {TAG_CACHED} {service.title()} held slots - "
+          f"using data from {int(age)}s ago, refreshes in {remaining}s.")
+    return entry["slots"]
+
+
+def update_held_cache(service: str, slots: list) -> None:
+    """
+    Store the current held slots for a service in the cache.
+
+    Call this whenever a live fetch of held slots succeeds so subsequent
+    reads within the TTL can skip the API call.
+
+    Args:
+        service: 'hotel' or 'band'.
+        slots:   Sorted list of held slot IDs as integers.
+    """
+    _held_cache[service] = {"slots": slots, "fetched_at": time.time()}
+
+
+def invalidate_held_cache(service: str) -> None:
+    """
+    Remove the held-slot cache for a service immediately.
+
+    Call this after any booking or cancellation on that service so the
+    next read is forced to go to the server for accurate data.
+
+    Args:
+        service: 'hotel' or 'band'.
+    """
+    _held_cache[service] = None
