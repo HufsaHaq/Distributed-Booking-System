@@ -81,6 +81,8 @@ def get_held_with_retry(api: reservationapi.ReservationApi, service: str) -> lis
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
+            from colours import TAG_LIVE
+            print(f"  {TAG_LIVE} Fetching {service} held slots from server...")
             slots = slot_ids(api.get_slots_held())
             update_held_cache(service, slots)
             return slots

@@ -110,6 +110,11 @@ class ReservationApi:
             # server load. Attempt 1 → base delay, attempt 2 → 2×, attempt 3 → 4×.
             # Always at least self.delay to satisfy the 1-second rate limit.
             backoff = self.delay * (2 ** (attempt - 1))
+            if attempt == 1:
+                warnings.warn(
+                    f"Rate limiting: waiting {backoff:.0f}s before next request "
+                    f"(1 request/second minimum required)."
+                )
             time.sleep(backoff)
 
             if response.status_code == 200:

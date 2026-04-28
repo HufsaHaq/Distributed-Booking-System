@@ -115,8 +115,8 @@ def get_held_cached(service: str) -> list | None:
     Return the cached list of held slot IDs for the given service, or None
     if the cache is empty or has expired.
 
-    Callers should fall back to a live API fetch (get_held_with_retry) if
-    this returns None.
+    Prints a clear message in both cases so the user always knows whether
+    they are seeing cached or live data.
 
     Args:
         service: 'hotel' or 'band'.
@@ -130,6 +130,8 @@ def get_held_cached(service: str) -> list | None:
     age = time.time() - entry["fetched_at"]
     if age >= HELD_CACHE_AGE_SECONDS:
         _held_cache[service] = None
+        print(f"  {TAG_CACHED} {service.title()} held slots - "
+              f"cache expired after {HELD_CACHE_AGE_SECONDS}s, fetching fresh from server...")
         return None
     remaining = int(HELD_CACHE_AGE_SECONDS - age)
     print(f"  {TAG_CACHED} {service.title()} held slots - "

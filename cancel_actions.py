@@ -34,14 +34,9 @@ def cancel_booking() -> None:
     """
     Let the user cancel a reservation on the hotel, band, or both.
 
-    Fetches current holdings first so the user can see what is cancellable,
-    then validates the chosen slot against those holdings before touching the
-    API. Asks for confirmation before any destructive call. If the user enters
-    a slot they do not hold, they are told clearly and returned to the menu
-    without making any API call.
-
-    If cancelling the same slot on both services, the two release calls run
-    in parallel.
+    Asks which service(s) to cancel on first, then shows only the slots
+    held on that service, then asks for the slot number. This avoids
+    showing irrelevant slots and makes the flow feel more natural.
 
     Returns:
         None. Prints results directly to stdout.
@@ -54,7 +49,7 @@ def cancel_booking() -> None:
             lambda: get_held("hotel", hotel),
             lambda: get_held("band",  band),
         )
-    except Exception as e:
+    except Exception:
         print("  Could not retrieve your reservations - the server may be temporarily unavailable. Please try again.")
         return
 
@@ -68,7 +63,39 @@ def cancel_booking() -> None:
     print(f"\n  {CYAN}{BOLD}Hotel{RESET} slots held: {fmt(hotel_held)}")
     print(f"  {YELLOW}{BOLD}Band {RESET} slots held: {fmt(band_held)}")
 
-    raw = input("\nEnter the slot number to cancel (or press Enter to go back): ").strip()
+    # Step 1: ask which service(s) first
+    print()
+    service_choice = input(
+        "  Cancel on hotel, band, or both? (or press Enter to go back): "
+    ).strip().lower()
+
+    if not service_choice:
+        print("  Cancelled.")
+        return
+
+    on_hotel = service_choice in ("hotel", "both")
+    on_band  = service_choice in ("band",  "both")
+
+    if not on_hotel and not on_band:
+        print("  Please enter 'hotel', 'band', or 'both'.")
+        return
+
+    # Step 2: show relevant slots and ask for the slot number
+    if on_hotel and on_band:
+        relevant = sorted(set(hotel_held) | set(band_held))
+        print(f"\n  Slots available to cancel: {fmt(relevant)}")
+    elif on_hotel:
+        if not hotel_held:
+            print("  You have no hotel reservations to cancel.")
+            return
+        print(f"\n  Hotel slots you hold: {fmt(hotel_held)}")
+    else:
+        if not band_held:
+            print("  You have no band reservations to cancel.")
+            return
+        print(f"\n  Band slots you hold: {fmt(band_held)}")
+
+    raw = input("\n  Enter the slot number to cancel (or press Enter to go back): ").strip()
     if not raw:
         print("  Cancelled.")
         return
@@ -79,27 +106,22 @@ def cancel_booking() -> None:
         print(f"  '{raw}' is not a valid slot number.")
         return
 
-    on_hotel = slot_id in hotel_held
-    on_band  = slot_id in band_held
+    # Validate against the chosen service(s)
+    if on_hotel and slot_id not in hotel_held:
+        print(f"  You do not hold hotel slot {slot_id}. Hotel slots: {fmt(hotel_held)}")
+        if not on_band:
+            return
+        on_hotel = False  # only had hotel in mind but slot isn't there
+
+    if on_band and slot_id not in band_held:
+        print(f"  You do not hold band slot {slot_id}. Band slots: {fmt(band_held)}")
+        on_band = False
 
     if not on_hotel and not on_band:
-        print(f"\n  You do not hold slot {slot_id} on either service.")
-        print(f"  Hotel slots held: {fmt(hotel_held)}")
-        print(f"  Band  slots held: {fmt(band_held)}")
+        print(f"  You do not hold slot {slot_id} on the requested service(s).")
         return
 
-    if on_hotel and on_band:
-        choice = input(
-            f"\n  Slot {slot_id} is held on both services. "
-            "Cancel on hotel, band, or both? [hotel/band/both]: "
-        ).strip().lower()
-        on_hotel = choice in ("hotel", "both")
-        on_band  = choice in ("band",  "both")
-        if not on_hotel and not on_band:
-            print("  Unrecognised choice. Nothing cancelled.")
-            return
-
-    # Show what will be cancelled and ask for confirmation
+    # Confirm before doing anything destructive
     targets = []
     if on_hotel:
         targets.append(f"hotel slot {slot_id}")
