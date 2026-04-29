@@ -98,22 +98,61 @@ def view_available_slots() -> None:
 
     elapsed = time.time() - t0
 
+    # Read holdings to identify half-pairs
+    try:
+        hotel_held, band_held = run_both(
+            lambda: get_held("hotel", hotel),
+            lambda: get_held("band",  band),
+        )
+    except Exception:
+        hotel_held, band_held = [], []
+
     def concat_slots(slots):
         return ", ".join(str(s) for s in slots[:20]) if slots else "none available"
 
     print(f"\n  {CYAN}Hotel{RESET} \t - first 20 available: {concat_slots(hotel_slots)}")
     print(f"  {YELLOW}Band {RESET} \t - first 20 available: {concat_slots(band_slots)}")
 
+
+    # True matches: free on both right now
     matching = sorted(set(hotel_slots) & set(band_slots))
+
+    # Half-pair completable: you hold one side, the other side is available
+    # e.g. you hold hotel 32, band 32 is available → book band to complete
+    hotel_set  = set(hotel_slots)
+    band_set   = set(band_slots)
+    completable_via_hotel = sorted(  # hold hotel, band available
+        s for s in hotel_held if s not in band_held and s in band_set
+    )
+    completable_via_band = sorted(   # hold band, hotel available
+        s for s in band_held if s not in hotel_held and s in hotel_set
+    )
+
     if matching:
         temp = ", ".join(str(s) for s in matching[:20])
         print(f"\n  {CYAN}Hotel{RESET} AND {YELLOW}Band{RESET} - first 20 available: {temp}")
+ 
     else:
-        print("\n  No slots are currently free on both services simultaneously.")
+        print(f"\n  No slots are currently free on both services simultaneously.")
+
+    if completable_via_hotel:
+        slots_str = ", ".join(str(s) for s in completable_via_hotel[:20])
+        print(f"  {GREEN}Potential matches (you hold {CYAN}hotel{RESET}{GREEN},"
+              f" {YELLOW}band{RESET}{GREEN} available - book band to complete):{RESET} {slots_str}")
+
+    if completable_via_band:
+        slots_str = ", ".join(str(s) for s in completable_via_band[:20])
+        print(f"  {GREEN}Potential matches (you hold {YELLOW}band{RESET}{GREEN},"
+              f" {CYAN}hotel{RESET}{GREEN} available - book hotel to complete):{RESET} {slots_str}")
+
+    if not matching and not completable_via_hotel and not completable_via_band:
+        print("  No immediately bookable matching pairs available.")
 
     print(f"\n  Hotel: {len(hotel_slots)} free | "
           f"Band: {len(band_slots)} free | "
-          f"Matching: {len(matching)}  ({elapsed:.1f}s)")
+          f"Matching: {len(matching)} | "
+          f"Completable half-pairs: {len(completable_via_hotel) + len(completable_via_band)}"
+          f"  ({elapsed:.1f}s)")
 
 
 def view_matching_slots() -> None:
@@ -163,6 +202,6 @@ def view_matching_slots() -> None:
 
     print(f"\n  First 5 matchable slots (available on both, or already confirmed):")
     for slot in matching[:5]:
-        tag = f"  {GREEN} you already hold this{RESET}" if slot in confirmed else ""
+        tag = f"  {GREEN}✓ you already hold this{RESET}" if slot in confirmed else ""
         print(f"    Slot {slot}{tag}")
     print(f"\n  ({len(matching)} matchable in total  |  {elapsed:.1f}s)")
