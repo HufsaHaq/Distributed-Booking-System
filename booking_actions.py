@@ -260,7 +260,7 @@ def _book_matching() -> None:
     from colours import RED, RESET as R
     print("\nBook matching slot (hotel + band)")
 
-    # ── Step 1: Fetch available matching slots ────────────────────────────────
+    #  Fetch available matching slots 
     matching     = []
     try:
         print(f"  {TAG_THREADED} Fetching availability from hotel and band simultaneously...")
@@ -285,7 +285,7 @@ def _book_matching() -> None:
             print("  Returning to menu.")
             return
 
-    # ── Step 2: Get current holdings ─────────────────────────────────────────
+    #  Get current holdings ─
     try:
         print(f"  {TAG_THREADED} Checking your current reservations...")
         hotel_held, band_held = run_both(
@@ -301,12 +301,35 @@ def _book_matching() -> None:
     if current_best:
         print(f"\n  Your current best confirmed booking: Slot {current_best}")
 
-    # ── Step 3: Get slot number from user ─────────────────────────────────────
+    # Show half-pairs completable right now (hold one side, other is available)
+    if hotel_slots or band_slots:
+        from colours import GREEN, CYAN, YELLOW, RESET as CR
+        hotel_set = set(hotel_slots) if hotel_slots else set()
+        band_set  = set(band_slots)  if band_slots  else set()
+
+        completable_via_hotel = sorted(
+            s for s in hotel_held if s not in band_held and s in band_set
+        )
+        completable_via_band = sorted(
+            s for s in band_held if s not in hotel_held and s in hotel_set
+        )
+        if completable_via_hotel:
+            slots_str = ", ".join(str(s) for s in completable_via_hotel[:20])
+            print(f"  {GREEN}Completable half-pairs "
+                  f"(you hold {CYAN}hotel{CR}{GREEN}, "
+                  f"{YELLOW}band{CR}{GREEN} available - book band to confirm):{CR} {slots_str}")
+        if completable_via_band:
+            slots_str = ", ".join(str(s) for s in completable_via_band[:20])
+            print(f"  {GREEN}Completable half-pairs "
+                  f"(you hold {YELLOW}band{CR}{GREEN}, "
+                  f"{CYAN}hotel{CR}{GREEN} available - book hotel to confirm):{CR} {slots_str}")
+
+    #  Get slot number from user 
     slot_id = _prompt_slot_number()
     if slot_id is None:
         return
 
-    # ── Step 4: Re-search - suggest an earlier matching slot if one exists ────
+    #  Re-search - suggest an earlier matching slot if one exists 
     if matching:
         earlier = [s for s in matching if s < slot_id]
         if earlier:
@@ -318,7 +341,7 @@ def _book_matching() -> None:
                 slot_id = best_earlier
                 print(f"  Updated: will book slot {slot_id}.")
 
-    # ── Step 5: Warn if chosen slot not in available list ────────────────────
+    # Warn if chosen slot not in available list 
     # Do this BEFORE releasing anything so the user can back out safely.
     if matching and slot_id not in matching:
         print(f"\n  {RED}Warning:{R} Slot {slot_id} does not appear to be free "
@@ -330,7 +353,7 @@ def _book_matching() -> None:
             print("  Cancelled - nothing was changed.")
             return
 
-    # ── Step 6: Smart limit handling ──────────────────────────────────────────
+    #  Smart limit handling 
     hotel_drop = None
     band_drop  = None
 
@@ -338,7 +361,9 @@ def _book_matching() -> None:
 
         if current_best is not None and slot_id < current_best:
             # New slot is earlier - we want to upgrade. But we must book the
-            # new slot BEFORE releasing the old confirmed pair,
+            # new slot BEFORE releasing the old confirmed pair, so we are never
+            # left with nothing. Only release unmatched/worse slots now to make
+            # room; the old confirmed pair is released in Step 10 after success.
             print(f"\n  Slot {slot_id} is earlier than your current best booking "
                   f"(slot {current_best}) - this is an upgrade.")
             print("  Making room by releasing unmatched slots first "
@@ -391,7 +416,7 @@ def _book_matching() -> None:
                 if band_drop is None:
                     return
 
-    # ── Step 7: Release user-chosen slots ─────────────────────────────────────
+    # Release user-chosen slots 
     if hotel_drop is not None:
         print(f"\n  Releasing hotel slot {hotel_drop} to make room for slot {slot_id}...")
         if not safe_release(hotel, "hotel", hotel_drop):
@@ -407,7 +432,7 @@ def _book_matching() -> None:
                       "and cannot be recovered automatically.")
             return
 
-    # ── Step 8: Book hotel ────────────────────────────────────────────────────
+    # Book hotel 
     print(f"\n  Reserving hotel slot {slot_id}...")
     hotel_booked = False
     try:
@@ -433,7 +458,7 @@ def _book_matching() -> None:
     if not hotel_booked:
         return
 
-    # ── Step 9: Book band ─────────────────────────────────────────────────────
+    # Book band 
     print(f"  Reserving band slot {slot_id}...")
     try:
         band.reserve_slot(slot_id)
@@ -463,8 +488,9 @@ def _book_matching() -> None:
         safe_release(hotel, "hotel", slot_id)
         return
 
-    # Both confirmed - now safely release the old pair
+    #  Both confirmed - now safely release the old pair ─
     print(f"\n  Slot {slot_id} is now confirmed on both hotel and band.")
+
     if current_best is not None and slot_id < current_best:
         # Release whatever remains of the old confirmed pair (may already be
         # partially released if we had to make room above)
@@ -507,7 +533,7 @@ def reserve_earliest_match():
     t0 = time.time()
     attempt_used = 0
 
-    # ── Read current holdings ─────────────────────────────────────────────────
+    #  Read current holdings 
     try:
         print(f"  {TAG_THREADED} Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
@@ -610,7 +636,7 @@ def reserve_earliest_match():
         except Exception:
             print(f"  Could not book hotel slot {half_slot} - continuing to full search.")
 
-    # ── Main retry loop ───────────────────────────────────────────────────────
+    #  Main retry loop 
     for attempt in range(1, MAX_RETRIES + 1):
         attempt_used = attempt
 
@@ -749,7 +775,7 @@ def reserve_earliest_match():
             safe_release(hotel, "hotel", target)
             return
 
-        # ── Both confirmed - success ──────────────────────────────────────────
+        #  Both confirmed - success 
         print(f"\n  Slot {target} is now confirmed on both hotel and band.")
 
         # Re-read fresh holdings so _release_all_except has accurate lists
