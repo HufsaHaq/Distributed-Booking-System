@@ -298,6 +298,14 @@ def _book_matching() -> None:
     if slot_id is None:
         return
 
+    # Reject immediately if the chosen slot is worse than the current confirmed pair
+    if current_best is not None and slot_id >= current_best:
+        print(f"\n  You already have a confirmed booking at slot {current_best}, "
+              f"which is earlier than slot {slot_id}.")
+        print("  Booking a later slot would be a downgrade - request cancelled.")
+        print("  Use option 6 to automatically find an earlier slot.")
+        return
+
     # ── Step 4: Re-search - suggest an earlier matching slot if one exists ────
     if matching:
         earlier = [s for s in matching if s < slot_id]
@@ -330,7 +338,9 @@ def _book_matching() -> None:
 
         if current_best is not None and slot_id < current_best:
             # New slot is earlier - we want to upgrade. But we must book the
-            # new slot BEFORE releasing the old confirmed pair,
+            # new slot BEFORE releasing the old confirmed pair, so we are never
+            # left with nothing. Only release unmatched/worse slots now to make
+            # room; the old confirmed pair is released in Step 10 after success.
             print(f"\n  Slot {slot_id} is earlier than your current best booking "
                   f"(slot {current_best}) - this is an upgrade.")
             print("  Making room by releasing unmatched slots first "
@@ -455,7 +465,7 @@ def _book_matching() -> None:
         safe_release(hotel, "hotel", slot_id)
         return
 
-    # Both confirmed - now safely release the old pair ─────────────
+    # Both confirmed - now safely release the old pair 
     print(f"\n  Slot {slot_id} is now confirmed on both hotel and band.")
     if current_best is not None and slot_id < current_best:
         # Release whatever remains of the old confirmed pair (may already be
