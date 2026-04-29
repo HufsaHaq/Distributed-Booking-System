@@ -329,20 +329,50 @@ def _book_matching() -> None:
     if len(hotel_held) >= 2 or len(band_held) >= 2:
 
         if current_best is not None and slot_id < current_best:
-            # New slot is a better (earlier) date - auto-drop everything else.
+            # New slot is earlier — we want to upgrade. But we must book the
+            # new slot BEFORE releasing the old confirmed pair, so we are never
+            # left with nothing. Only release unmatched/worse slots now to make
+            # room; the old confirmed pair is released in Step 10 after success.
             print(f"\n  Slot {slot_id} is earlier than your current best booking "
-                  f"(slot {current_best}) - this is an upgrade.")
-            print("  Releasing all current reservations to secure this earlier slot:")
-            for s in list(hotel_held):
-                if s != slot_id:
-                    print(f"    Releasing hotel slot {s} (upgrading from {s} to {slot_id})...")
-                    safe_release(hotel, "hotel", s)
-            for s in list(band_held):
-                if s != slot_id:
-                    print(f"    Releasing band slot {s} (upgrading from {s} to {slot_id})...")
-                    safe_release(band, "band", s)
+                  f"(slot {current_best}) — this is an upgrade.")
+            print("  Making room by releasing unmatched slots first "
+                  "(confirmed pair kept until new booking is secured)...")
+
+            # Release unmatched hotel slots (not the confirmed pair) to make room
+            unmatched_hotel = [s for s in hotel_held if s not in band_held and s != slot_id]
+            for s in unmatched_hotel:
+                print(f"    Releasing unmatched hotel slot {s}...")
+                safe_release(hotel, "hotel", s)
+
+            # Release unmatched band slots
+            unmatched_band = [s for s in band_held if s not in hotel_held and s != slot_id]
+            for s in unmatched_band:
+                print(f"    Releasing unmatched band slot {s}...")
+                safe_release(band, "band", s)
+
+            # Refresh so the limit checks below are accurate
             hotel_held = get_held("hotel", hotel)
             band_held  = get_held("band",  band)
+
+            # If the confirmed pair is still filling the cap, we need to
+            # temporarily hold both old and new — which means we must drop
+            # the confirmed pair now only if we're STILL over the limit.
+            # In that case, warn the user clearly.
+            if len(hotel_held) >= 2:
+                print(f"  Hotel is still at the limit (holding: "
+                      f"{', '.join(f'Slot {s}' for s in hotel_held)}).")
+                print(f"  Must release the old confirmed hotel slot {current_best} "
+                      "to make room — new booking will be attempted immediately after.")
+                safe_release(hotel, "hotel", current_best)
+                hotel_held = get_held("hotel", hotel)
+
+            if len(band_held) >= 2:
+                print(f"  Band is still at the limit (holding: "
+                      f"{', '.join(f'Slot {s}' for s in band_held)}).")
+                print(f"  Must release the old confirmed band slot {current_best} "
+                      "to make room — new booking will be attempted immediately after.")
+                safe_release(band, "band", current_best)
+                band_held = get_held("band", band)
 
         else:
             # New slot is not an improvement - ask which ones to drop.
@@ -404,25 +434,46 @@ def _book_matching() -> None:
         clear_service_cache("band")
         invalidate_held_cache("band")
         print(f"  Band slot {slot_id} reserved.")
-        print(f"\n  Slot {slot_id} is now confirmed on both hotel and band.")
     except SlotUnavailableError:
         print(f"  Slot {slot_id} was just taken on the band.")
         print(f"  Releasing hotel slot {slot_id} to keep reservations tidy...")
         safe_release(hotel, "hotel", slot_id)
+        return
     except ReservationLimitError:
         print("  The band reservation limit is still showing - "
               "the server may not have processed the release yet.")
         print(f"  Hotel slot {slot_id} was reserved but band was not. "
               "Use option 7 to clean up, then try again.")
+        return
     except BadSlotError:
         print(f"  Slot {slot_id} does not exist (valid range: 1–550).")
         print(f"  Releasing hotel slot {slot_id}...")
         safe_release(hotel, "hotel", slot_id)
+        return
     except Exception:
         print("  The band reservation did not go through - "
               "the server may be temporarily unavailable.")
         print(f"  Releasing hotel slot {slot_id} to avoid a dangling reservation...")
         safe_release(hotel, "hotel", slot_id)
+        return
+
+    # ── Step 10: Both confirmed — now safely release the old pair ─────────────
+    print(f"\n  Slot {slot_id} is now confirmed on both hotel and band.")
+    if current_best is not None and slot_id < current_best:
+        # Release whatever remains of the old confirmed pair (may already be
+        # partially released if we had to make room above)
+        remaining_hotel = get_held("hotel", hotel)
+        remaining_band  = get_held("band",  band)
+        old_hotel = [s for s in remaining_hotel if s != slot_id]
+        old_band  = [s for s in remaining_band  if s != slot_id]
+        if old_hotel or old_band:
+            print("  Releasing remaining old reservations now that new booking is secured:")
+            for s in old_hotel:
+                print(f"    Releasing hotel slot {s}...")
+                safe_release(hotel, "hotel", s)
+            for s in old_band:
+                print(f"    Releasing band slot {s}...")
+                safe_release(band, "band", s)
 
 
 def reserve_earliest_match():
@@ -704,4 +755,3 @@ def _release_all_except(confirmed_slot: int, hotel_held: list, band_held: list):
         else:
             print(f"  Releasing band slot {slot}...")
             safe_release(band, "band", slot)
-            
