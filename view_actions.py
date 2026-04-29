@@ -191,17 +191,49 @@ def view_matching_slots() -> None:
 
     elapsed = time.time() - t0
 
-    hotel_opts = set(hotel_slots) | set(hotel_held)
-    band_opts  = set(band_slots)  | set(band_held)
+    hotel_set = set(hotel_slots)
+    band_set  = set(band_slots)
+
+    hotel_opts = hotel_set | set(hotel_held)
+    band_opts  = band_set  | set(band_held)
     matching   = sorted(hotel_opts & band_opts)
 
-    if not matching:
+    # Half-pairs: hold one side, other side is available right now
+    completable_via_hotel = sorted(
+        s for s in hotel_held if s not in band_held and s in band_set
+    )
+    completable_via_band = sorted(
+        s for s in band_held if s not in hotel_held and s in hotel_set
+    )
+
+    if not matching and not completable_via_hotel and not completable_via_band:
         print("  No slots are currently matchable on both services.")
         print("  Availability changes constantly - try again in a moment.")
         return
 
-    print(f"\n  First 5 matchable slots (available on both, or already confirmed):")
-    for slot in matching[:5]:
-        tag = f"  {GREEN}✓ you already hold this{RESET}" if slot in confirmed else ""
-        print(f"    Slot {slot}{tag}")
-    print(f"\n  ({len(matching)} matchable in total  |  {elapsed:.1f}s)")
+    if matching:
+        print(f"\n  First 5 matchable slots (available on both, or already confirmed):")
+        for slot in matching[:5]:
+            if slot in confirmed:
+                tag = f"  {GREEN} confirmed - you hold this on both{RESET}"
+            else:
+                tag = ""
+            print(f"    Slot {slot}{tag}")
+
+    if completable_via_hotel:
+        print(f"\n  {GREEN}Completable half-pairs "
+              f"(you hold {CYAN}hotel{RESET}{GREEN}, "
+              f"{YELLOW}band{RESET}{GREEN} is available - book band to confirm):{RESET}")
+        for slot in completable_via_hotel[:5]:
+            print(f"    Slot {slot}")
+
+    if completable_via_band:
+        print(f"\n  {GREEN}Completable half-pairs "
+              f"(you hold {YELLOW}band{RESET}{GREEN}, "
+              f"{CYAN}hotel{RESET}{GREEN} is available - book hotel to confirm):{RESET}")
+        for slot in completable_via_band[:5]:
+            print(f"    Slot {slot}")
+
+    print(f"\n  ({len(matching)} matchable | "
+          f"Completable half-pairs: {len(completable_via_hotel) + len(completable_via_band)}"
+          f"  |  {elapsed:.1f}s)")
