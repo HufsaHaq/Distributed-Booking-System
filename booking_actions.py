@@ -353,7 +353,6 @@ def _book_matching() -> None:
             print("  Cancelled - nothing was changed.")
             return
 
-    #  Smart limit handling 
     hotel_drop = None
     band_drop  = None
 
@@ -803,14 +802,52 @@ def reserve_earliest_match():
             if post_matching and post_matching[0] < target:
                 earlier = post_matching[0]
                 print(f"  Slot {earlier} has just become available - "
-                      f"earlier than your new booking (slot {target}).")
-                ans = input(f"  Would you like to try for slot {earlier}? "
-                            f"(Your current booking at slot {target} will be kept "
-                            f"unless slot {earlier} is successfully booked) [y/n]: "
+                      f"earlier than your confirmed booking (slot {target}).")
+                ans = input(f"  Try for slot {earlier}? Your slot {target} stays "
+                            f"until slot {earlier} is secured on both services. [y/n]: "
                             ).strip().lower()
                 if ans in ("y", "yes"):
-                    print(f"  Running another search to try for slot {earlier}...")
-                    reserve_earliest_match()
+                    print(f"\n  Attempting to upgrade to slot {earlier}...")
+                    hotel_ok = False
+                    try:
+                        hotel.reserve_slot(earlier)
+                        hotel_ok = True
+                        clear_service_cache("hotel")
+                        invalidate_held_cache("hotel")
+                        print(f"  Hotel slot {earlier} reserved.")
+                    except SlotUnavailableError:
+                        print(f"  Slot {earlier} was just taken on the hotel.")
+                        print(f"  Upgrade failed - your booking at slot {target} remains active.")
+                    except Exception:
+                        print(f"  Could not book hotel slot {earlier} - "
+                              f"your booking at slot {target} remains active.")
+
+                    if hotel_ok:
+                        band_ok = False
+                        try:
+                            band.reserve_slot(earlier)
+                            band_ok = True
+                            clear_service_cache("band")
+                            invalidate_held_cache("band")
+                            print(f"  Band slot {earlier} reserved.")
+                        except SlotUnavailableError:
+                            print(f"  Slot {earlier} was just taken on the band.")
+                            safe_release(hotel, "hotel", earlier)
+                            print(f"  Upgrade failed - your booking at slot {target} remains active.")
+                        except Exception:
+                            print(f"  Could not book band slot {earlier} - "
+                                  f"your booking at slot {target} remains active.")
+                            safe_release(hotel, "hotel", earlier)
+
+                        if band_ok:
+                            print(f"\n  Successfully upgraded to slot {earlier}.")
+                            print(f"  Releasing old booking at slot {target}...")
+                            run_both(
+                                lambda: safe_release(hotel, "hotel", target),
+                                lambda: safe_release(band,  "band",  target),
+                            )
+                            status.update([earlier], [earlier])
+                            print(f"  Your confirmed booking is now slot {earlier}.")
             else:
                 print(f"  No earlier slots available - slot {target} is the best.")
         except Exception:
