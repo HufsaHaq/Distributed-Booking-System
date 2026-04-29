@@ -76,8 +76,9 @@ def view_available_slots() -> None:
     """
     Fetch live availability from both services and show the first 20 slots each.
 
-    Always bypasses the cache (force_fresh=True) so the user sees current data.
-    Both fetches run in parallel. Updates the cache as a side effect.
+    Fetches from cache if data is less than 30 seconds old, otherwise
+    fetches live from both servers in parallel. Updates the cache as a
+    side effect so subsequent options benefit from the fresh data.
 
     Returns:
         None. Prints results directly to stdout.
@@ -88,8 +89,8 @@ def view_available_slots() -> None:
     try:
         print(f"  {TAG_THREADED} Fetching availability from hotel and band simultaneously...")
         hotel_slots, band_slots = run_both(
-            lambda: get_available(hotel, "hotel", force_fresh=True),
-            lambda: get_available(band,  "band",  force_fresh=True),
+            lambda: get_available(hotel, "hotel"),
+            lambda: get_available(band,  "band"),
         )
     except Exception as e:
         print("  Could not fetch slot availability - the server may be temporarily unavailable. Please try again.")
