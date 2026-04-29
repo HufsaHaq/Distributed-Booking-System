@@ -12,7 +12,7 @@ from clients  import hotel, band
 from cache    import get_available
 from helpers  import get_held, get_held_with_retry
 from parallel import run_both
-from colours  import TAG_THREADED, CYAN, YELLOW, BOLD, RESET
+from colours  import TAG_THREADED, CYAN, YELLOW, BOLD, RESET, GREEN
 import status
 
 
@@ -97,16 +97,16 @@ def view_available_slots() -> None:
 
     elapsed = time.time() - t0
 
-    def fmt20(slots):
+    def concat_slots(slots):
         return ", ".join(str(s) for s in slots[:20]) if slots else "none available"
 
-    print(f"\n  {CYAN}Hotel{RESET} \t - first 20 available: {fmt20(hotel_slots)}")
-    print(f"  {YELLOW}Band {RESET} \t - first 20 available: {fmt20(band_slots)}")
+    print(f"\n  {CYAN}Hotel{RESET} \t - first 20 available: {concat_slots(hotel_slots)}")
+    print(f"  {YELLOW}Band {RESET} \t - first 20 available: {concat_slots(band_slots)}")
 
     matching = sorted(set(hotel_slots) & set(band_slots))
     if matching:
-        fmt20m = ", ".join(str(s) for s in matching[:20])
-        print(f"\n  {CYAN}Hotel{RESET} AND {YELLOW}Band{RESET} - first 20 available: {fmt20m}")
+        temp = ", ".join(str(s) for s in matching[:20])
+        print(f"\n  {CYAN}Hotel{RESET} AND {YELLOW}Band{RESET} - first 20 available: {temp}")
     else:
         print("\n  No slots are currently free on both services simultaneously.")
 
@@ -117,10 +117,11 @@ def view_available_slots() -> None:
 
 def view_matching_slots() -> None:
     """
-    Show the 5 earliest slots currently free on both hotel and band.
+    Show the 5 earliest slots matchable on both hotel and band.
 
-    Uses the cache where available to reduce API calls. Both fetches run
-    in parallel.
+    Matchable means: available on both services, OR already confirmed
+    (held on both). Confirmed pairs are tagged so the user can see their
+    current booking in context.
 
     Returns:
         None. Prints results directly to stdout.
@@ -134,19 +135,33 @@ def view_matching_slots() -> None:
             lambda: get_available(hotel, "hotel"),
             lambda: get_available(band,  "band"),
         )
-    except Exception as e:
+    except Exception:
         print("  Could not fetch slot availability - the server may be temporarily unavailable. Please try again.")
         return
 
+    # Include slots already confirmed on both services
+    try:
+        hotel_held, band_held = run_both(
+            lambda: get_held("hotel", hotel),
+            lambda: get_held("band",  band),
+        )
+        confirmed = sorted(set(hotel_held) & set(band_held))
+    except Exception:
+        hotel_held, band_held, confirmed = [], [], []
+
     elapsed = time.time() - t0
-    matching = sorted(set(hotel_slots) & set(band_slots))
+
+    hotel_opts = set(hotel_slots) | set(hotel_held)
+    band_opts  = set(band_slots)  | set(band_held)
+    matching   = sorted(hotel_opts & band_opts)
 
     if not matching:
-        print("  No slots are currently free on both services at the same time.")
+        print("  No slots are currently matchable on both services.")
         print("  Availability changes constantly - try again in a moment.")
         return
 
-    print(f"\n  First 5 slots free on both services:")
+    print(f"\n  First 5 matchable slots (available on both, or already confirmed):")
     for slot in matching[:5]:
-        print(f"    Slot {slot}")
-    print(f"\n  ({len(matching)} matching slots available in total  |  {elapsed:.1f}s)")
+        tag = f"  {GREEN} you already hold this{RESET}" if slot in confirmed else ""
+        print(f"    Slot {slot}{tag}")
+    print(f"\n  ({len(matching)} matchable in total  |  {elapsed:.1f}s)")
