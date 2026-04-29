@@ -512,27 +512,26 @@ def _book_matching() -> None:
 
 def reserve_earliest_match():
     """
-    Find the earliest slot confirmed on both services and book it.
+    Find the earliest slot that can be confirmed on both services and book it.
 
-    Strategy (in order):
-    1. Read current holdings. Check for half-pairs (slot on one service
-       but not the other) and try to complete them first - that slot may
-       already be the earliest possible option.
-    2. Build the full set of matchable slots: available slots PLUS any
-       slot already held on both services, so confirmed pairs are visible.
-    3. If the current confirmed pair is already the earliest matchable
-       slot, tell the user and stop - nothing to improve.
-    4. Attempt to book the earliest matchable slot. On failure, prompt
-       the user whether to keep trying rather than silently retrying.
-    5. After a successful booking, release EVERY other reservation on
-       both services so exactly one clean pair remains.
+    Strategy:
+    1. Fetch current holdings and live availability simultaneously.
+    2. Build the full candidate set: slots available on both services PLUS
+       slots already held on one side where the other side is now available
+       (half-pairs). This ensures half-pairs compete on equal footing with
+       brand-new slots - the EARLIEST wins regardless of type.
+    3. If the current confirmed pair is already the earliest candidate, stop.
+    4. Book the target slot. If we already hold one side (half-pair), skip
+       that booking and only book the missing side.
+    5. On failure, prompt the user whether to keep trying.
+    6. After success, release every other reservation so exactly one clean
+       pair remains.
     """
-    from colours import YELLOW, RESET as R
     print("\nSearching for the earliest slot free on both hotel and band...")
-    t0 = time.time()
+    t0           = time.time()
     attempt_used = 0
 
-    #  Read current holdings 
+    # Read current holdings
     try:
         print(f"  {TAG_THREADED} Querying hotel and band held slots simultaneously...")
         hotel_held, band_held = run_both(
@@ -550,92 +549,7 @@ def reserve_earliest_match():
     if current_best:
         print(f"  Your current best confirmed booking: Slot {current_best}.")
 
-    # try to complete any half-pair first
-    # A half-pair is a slot held on one service with no partner on the other.
-    # Completing it may be better than searching for a brand new slot.
-    only_hotel = [s for s in hotel_held if s not in band_held]
-    only_band  = [s for s in band_held  if s not in hotel_held]
-
-    for half_slot in sorted(only_hotel):
-        print(f"\n  You already hold hotel slot {half_slot} with no matching band slot.")
-        print(f"  Attempting to complete this pair by booking band slot {half_slot}...")
-
-        # Make room on band if at the limit - drop the worst unmatched band slot
-        if len(band_held) >= 2:
-            unmatched_band = [s for s in band_held if s not in hotel_held]
-            if not unmatched_band:
-                print(f"  Band is at the limit and all slots are part of confirmed pairs. "
-                      "Cannot make room - skipping.")
-                continue
-            to_drop = max(unmatched_band)
-            print(f"  Band is at the reservation limit. "
-                  f"Releasing unmatched band slot {to_drop} to make room...")
-            if not safe_release(band, "band", to_drop):
-                print("  Could not free a band slot - skipping half-pair completion.")
-                continue
-            band_held = get_held("band", band)
-
-        try:
-            band.reserve_slot(half_slot)
-            clear_service_cache("band")
-            invalidate_held_cache("band")
-            print(f"  Band slot {half_slot} reserved - slot {half_slot} is now confirmed!")
-            # Re-read fresh lists then release everything else
-            fresh_hotel = get_held("hotel", hotel)
-            fresh_band  = get_held("band",  band)
-            _release_all_except(half_slot, fresh_hotel, fresh_band)
-            status.update([half_slot], [half_slot])
-            elapsed = time.time() - t0
-            print(f"\n  Completed in {elapsed:.1f}s.")
-            return
-        except SlotUnavailableError:
-            print(f"  Band slot {half_slot} is already taken - will search for a new pair.")
-        except ReservationLimitError:
-            print(f"  Band reservation limit still showing - server may be processing. "
-                  "Continuing to full search.")
-        except Exception:
-            print(f"  Could not book band slot {half_slot} - continuing to full search.")
-
-    for half_slot in sorted(only_band):
-        print(f"\n  You already hold band slot {half_slot} with no matching hotel slot.")
-        print(f"  Attempting to complete this pair by booking hotel slot {half_slot}...")
-
-        # Make room on hotel if at the limit
-        if len(hotel_held) >= 2:
-            unmatched_hotel = [s for s in hotel_held if s not in band_held]
-            if not unmatched_hotel:
-                print(f"  Hotel is at the limit and all slots are part of confirmed pairs. "
-                      "Cannot make room - skipping.")
-                continue
-            to_drop = max(unmatched_hotel)
-            print(f"  Hotel is at the reservation limit. "
-                  f"Releasing unmatched hotel slot {to_drop} to make room...")
-            if not safe_release(hotel, "hotel", to_drop):
-                print("  Could not free a hotel slot - skipping half-pair completion.")
-                continue
-            hotel_held = get_held("hotel", hotel)
-
-        try:
-            hotel.reserve_slot(half_slot)
-            clear_service_cache("hotel")
-            invalidate_held_cache("hotel")
-            print(f"  Hotel slot {half_slot} reserved - slot {half_slot} is now confirmed!")
-            fresh_hotel = get_held("hotel", hotel)
-            fresh_band  = get_held("band",  band)
-            _release_all_except(half_slot, fresh_hotel, fresh_band)
-            status.update([half_slot], [half_slot])
-            elapsed = time.time() - t0
-            print(f"\n  Completed in {elapsed:.1f}s.")
-            return
-        except SlotUnavailableError:
-            print(f"  Hotel slot {half_slot} is already taken - will search for a new pair.")
-        except ReservationLimitError:
-            print(f"  Hotel reservation limit still showing - server may be processing. "
-                  "Continuing to full search.")
-        except Exception:
-            print(f"  Could not book hotel slot {half_slot} - continuing to full search.")
-
-    #  Main retry loop 
+    # Main retry loop - half-pairs and full matches are considered together
     for attempt in range(1, MAX_RETRIES + 1):
         attempt_used = attempt
 
@@ -653,7 +567,9 @@ def reserve_earliest_match():
                 time.sleep(wait)
             continue
 
-        #matching includes slots already held on BOTH services
+        # Candidate set: slots completable as a matched pair right now.
+        # Includes full matches (available on both) AND half-pairs
+        # (held on one side, available on the other).
         hotel_opts = set(hotel_avail) | set(hotel_held)
         band_opts  = set(band_avail)  | set(band_held)
         matching   = sorted(hotel_opts & band_opts)
@@ -661,7 +577,7 @@ def reserve_earliest_match():
         if not matching:
             if attempt < MAX_RETRIES:
                 wait = DELAY * (2 ** (attempt - 1))
-                print(f"  No slots available on both services right now "
+                print(f"  No completable slots right now "
                       f"(attempt {attempt}/{MAX_RETRIES}). "
                       f"Waiting {wait:.0f}s and trying again...")
                 time.sleep(wait)
@@ -674,10 +590,14 @@ def reserve_earliest_match():
 
         target = matching[0]
 
-        # matching includes slots already held on BOTH services
-        if current_best is not None and current_best == target:
-            print(f"\n  Your current booking (slot {current_best}) is already the "
-                  "earliest possible matching slot available.")
+        # Determine what kind of candidate this is and tell the user
+        already_have_hotel = target in hotel_held
+        already_have_band  = target in band_held
+
+        if already_have_hotel and already_have_band:
+            # Already confirmed - nothing to do
+            print(f"\n  Your current booking (slot {current_best or target}) is already "
+                  "the earliest possible matching slot available.")
             print("  There is nothing to improve - you have the best possible booking.")
             return
 
@@ -686,9 +606,17 @@ def reserve_earliest_match():
                   "the earliest available match. Nothing to do.")
             return
 
-        print(f"\n  Earliest matchable slot: {target}. Attempting to book...")
+        if already_have_hotel:
+            print(f"\n  Earliest candidate: Slot {target} "
+                  f"(you already hold hotel - need to book band).")
+        elif already_have_band:
+            print(f"\n  Earliest candidate: Slot {target} "
+                  f"(you already hold band - need to book hotel).")
+        else:
+            print(f"\n  Earliest candidate: Slot {target} "
+                  f"(need to book both hotel and band).")
 
-        # Re-read holdings before booking
+        # Re-read fresh holdings before any booking attempt
         try:
             print(f"  {TAG_THREADED} Re-reading held slots simultaneously...")
             hotel_held, band_held = run_both(
@@ -700,84 +628,91 @@ def reserve_earliest_match():
                   "the server may be temporarily unavailable.")
             return
 
-        # Make room on hotel if needed
-        if len(hotel_held) >= 2:
-            if not free_up_slot(hotel, "hotel", hotel_held, band_held):
-                return
-            hotel_held = get_held_with_retry(hotel, "hotel")
-
-        # Reserve hotel side
-        print(f"  Reserving hotel slot {target}...")
-        hotel_booked = False
-        try:
-            hotel.reserve_slot(target)
+        if already_have_hotel:
+            print(f"  Already hold hotel slot {target} - skipping hotel booking.")
             hotel_booked = True
-            clear_service_cache("hotel")
-            invalidate_held_cache("hotel")
-            print(f"  Hotel slot {target} reserved.")
-        except SlotUnavailableError:
-            print(f"  Slot {target} was just taken by another client on the hotel.")
-            #prompt user instead of silently retrying
-            if attempt < MAX_RETRIES:
-                ans = input(f"  Keep searching for the next earliest slot? [y/n]: ").strip().lower()
-                if ans not in ("y", "yes"):
-                    print("  Search cancelled. Returning to menu.")
+        else:
+            # Make room on hotel if at the cap
+            if len(hotel_held) >= 2:
+                if not free_up_slot(hotel, "hotel", hotel_held, band_held):
                     return
-                wait = DELAY * (2 ** (attempt - 1))
-                print(f"  Waiting {wait:.0f}s before next attempt...")
-                time.sleep(wait)
-            continue
-        except ReservationLimitError:
-            print("  You are already holding the maximum of 2 hotel reservations. "
-                  "Use option 7 to cancel unnecessary ones first.")
-            return
-        except Exception:
-            print("  The hotel reservation did not go through - "
-                  "the server may be temporarily unavailable.")
-            return
+                hotel_held = get_held_with_retry(hotel, "hotel")
 
-        # Make room on band if needed
-        if len(band_held) >= 2:
-            if not free_up_slot(band, "band", band_held, hotel_held):
-                safe_release(hotel, "hotel", target)
+            print(f"  Reserving hotel slot {target}...")
+            hotel_booked = False
+            try:
+                hotel.reserve_slot(target)
+                hotel_booked = True
+                clear_service_cache("hotel")
+                invalidate_held_cache("hotel")
+                print(f"  Hotel slot {target} reserved.")
+            except SlotUnavailableError:
+                print(f"  Slot {target} was just taken by another client on the hotel.")
+                if attempt < MAX_RETRIES:
+                    ans = input("  Keep searching for the next earliest slot? [y/n]: ").strip().lower()
+                    if ans not in ("y", "yes"):
+                        print("  Search cancelled. Returning to menu.")
+                        return
+                    wait = DELAY * (2 ** (attempt - 1))
+                    print(f"  Waiting {wait:.0f}s before next attempt...")
+                    time.sleep(wait)
+                continue
+            except ReservationLimitError:
+                print("  You are already holding the maximum of 2 hotel reservations. "
+                      "Use option 7 to cancel unnecessary ones first.")
                 return
-            band_held = get_held_with_retry(band, "band")
+            except Exception:
+                print("  The hotel reservation did not go through - "
+                      "the server may be temporarily unavailable.")
+                return
 
-        # Reserve band side
-        print(f"  Reserving band slot {target}...")
-        try:
-            band.reserve_slot(target)
-            clear_service_cache("band")
-            invalidate_held_cache("band")
-            print(f"  Band slot {target} reserved.")
-        except SlotUnavailableError:
-            print(f"  Slot {target} was just taken by another client on the band.")
-            safe_release(hotel, "hotel", target)
-            # prompt on failure
-            if attempt < MAX_RETRIES:
-                ans = input(f"  Keep searching for the next earliest slot? [y/n]: ").strip().lower()
-                if ans not in ("y", "yes"):
-                    print("  Search cancelled. Returning to menu.")
+        if already_have_band:
+            print(f"  Already hold band slot {target} - skipping band booking.")
+        else:
+            # Make room on band if at the cap
+            if len(band_held) >= 2:
+                if not free_up_slot(band, "band", band_held, hotel_held):
+                    if not already_have_hotel:
+                        safe_release(hotel, "hotel", target)
                     return
-                wait = DELAY * (2 ** (attempt - 1))
-                print(f"  Waiting {wait:.0f}s before next attempt...")
-                time.sleep(wait)
-            continue
-        except ReservationLimitError:
-            print("  You are already holding the maximum of 2 band reservations.")
-            print(f"  Releasing hotel slot {target} - use option 7 to clean up, then try again.")
-            safe_release(hotel, "hotel", target)
-            return
-        except Exception:
-            print("  The band reservation did not go through - "
-                  "the server may be temporarily unavailable.")
-            safe_release(hotel, "hotel", target)
-            return
+                band_held = get_held_with_retry(band, "band")
 
-        #  Both confirmed - success 
+            print(f"  Reserving band slot {target}...")
+            try:
+                band.reserve_slot(target)
+                clear_service_cache("band")
+                invalidate_held_cache("band")
+                print(f"  Band slot {target} reserved.")
+            except SlotUnavailableError:
+                print(f"  Slot {target} was just taken by another client on the band.")
+                if not already_have_hotel:
+                    safe_release(hotel, "hotel", target)
+                if attempt < MAX_RETRIES:
+                    ans = input("  Keep searching for the next earliest slot? [y/n]: ").strip().lower()
+                    if ans not in ("y", "yes"):
+                        print("  Search cancelled. Returning to menu.")
+                        return
+                    wait = DELAY * (2 ** (attempt - 1))
+                    print(f"  Waiting {wait:.0f}s before next attempt...")
+                    time.sleep(wait)
+                continue
+            except ReservationLimitError:
+                print("  You are already holding the maximum of 2 band reservations.")
+                print(f"  Releasing hotel slot {target} - use option 7 to clean up, then try again.")
+                if not already_have_hotel:
+                    safe_release(hotel, "hotel", target)
+                return
+            except Exception:
+                print("  The band reservation did not go through - "
+                      "the server may be temporarily unavailable.")
+                if not already_have_hotel:
+                    safe_release(hotel, "hotel", target)
+                return
+
         print(f"\n  Slot {target} is now confirmed on both hotel and band.")
 
         # Re-read fresh holdings so _release_all_except has accurate lists
+
         # (hotel_held/band_held were read before booking and may be stale)
         try:
             fresh_hotel = get_held("hotel", hotel)
