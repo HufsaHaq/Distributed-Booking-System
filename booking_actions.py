@@ -157,6 +157,10 @@ def _book_hotel_only() -> None:
         invalidate_held_cache("hotel")
         print(f"  Hotel slot {slot_id} reserved.")
         print("  Note: you still need a matching band slot to confirm the wedding.")
+        # Update status so the menu reflects the new holding immediately
+        fresh_hotel = get_held("hotel", hotel)
+        fresh_band  = get_held("band",  band)
+        status.update(fresh_hotel, fresh_band)
     except SlotUnavailableError:
         print(f"  Slot {slot_id} is already taken on the hotel.")
     except ReservationLimitError:
@@ -220,6 +224,10 @@ def _book_band_only() -> None:
         invalidate_held_cache("band")
         print(f"  Band slot {slot_id} reserved.")
         print("  Note: you still need a matching hotel slot to confirm the wedding.")
+        # Update status so the menu reflects the new holding immediately
+        fresh_hotel = get_held("hotel", hotel)
+        fresh_band  = get_held("band",  band)
+        status.update(fresh_hotel, fresh_band)
     except SlotUnavailableError:
         print(f"  Slot {slot_id} is already taken on the band.")
     except ReservationLimitError:
@@ -455,7 +463,7 @@ def _book_matching() -> None:
         safe_release(hotel, "hotel", slot_id)
         return
 
-    # Both confirmed - now safely release the old pair ─────────────
+    # Both confirmed - now safely release the old pair
     print(f"\n  Slot {slot_id} is now confirmed on both hotel and band.")
     if current_best is not None and slot_id < current_best:
         # Release whatever remains of the old confirmed pair (may already be
@@ -472,6 +480,9 @@ def _book_matching() -> None:
             for s in old_band:
                 print(f"    Releasing band slot {s}...")
                 safe_release(band, "band", s)
+
+    # Update status so the menu reflects the confirmed pair immediately
+    status.update([slot_id], [slot_id])
 
 
 def reserve_earliest_match():
